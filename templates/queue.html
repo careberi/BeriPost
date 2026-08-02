@@ -55,7 +55,7 @@
 
       {% if publishable %}
         <form method="post" action="{{ url_for('publish_one', post_id=post.id) }}">
-          <button class="btn primary" type="submit"
+          <button class="btn publish" type="submit"
                   {% if not fb_ready %}disabled title="Connect Facebook first"{% endif %}>
             Publish now
           </button>
@@ -81,7 +81,7 @@
     <h2>Approved <span class="count">{{ approved|length }}</span></h2>
     {% if approved %}
       <form method="post" action="{{ url_for('publish_approved') }}">
-        <button class="btn primary" type="submit"
+        <button class="btn publish" type="submit"
                 {% if not fb_ready %}disabled title="Connect Facebook first"{% endif %}>
           Publish all approved
         </button>

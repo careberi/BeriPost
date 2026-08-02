@@ -1,36 +1,43 @@
 :root {
-  --primary: #1F6F6F;
-  --secondary: #F4A259;
-  --ink: #1A2E2E;
-  --muted: #6b7c7c;
-  --bg: #f4f6f6;
+  /* Careberi brand palette (from the style guide) */
+  --navy: #16265C;
+  --ocean: #2A5D9F;
+  --azure: #2F80C2;
+  --sky: #5AA9DE;
+  --ice: #93CDEC;
+  --berry: #D25680;   /* reserve for the primary call-to-action (Publish) */
+  --ink: #1F2733;
+  --slate: #4B5563;
+  --muted: #6B7280;
+  --line: #E2E8F0;
+  --cloud: #F4F8FC;
+  --page: #EEF2F7;
   --card: #ffffff;
   --ok: #1f7a4d;
   --danger: #b23b3b;
-  --line: #e0e6e6;
 }
 
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  background: var(--bg);
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--page);
   color: var(--ink);
 }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 24px; background: var(--primary); color: #fff;
+  padding: 14px 24px; background: var(--navy); color: #fff;
   position: sticky; top: 0; z-index: 10;
 }
-.brand { font-size: 22px; font-weight: 700; letter-spacing: .5px; }
-.brand span { color: var(--secondary); }
+.brand { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.brand span { color: var(--sky); }
 .mode { font-size: 14px; }
 .mode strong { text-transform: uppercase; }
-.mode-review { color: #ffe6b3; }
-.mode-auto { color: #ffd0d0; }
-.hint { color: #cfe3e3; font-size: 12px; margin-left: 6px; }
-.warn { color: #ffdada; background: rgba(0,0,0,.15); padding: 2px 8px; border-radius: 10px; margin-left: 10px; font-size: 12px; }
+.mode-review { color: var(--ice); }
+.mode-auto { color: #f5b8cd; }
+.hint { color: #9fb6d6; font-size: 12px; margin-left: 6px; }
+.warn { color: #f5b8cd; background: rgba(0,0,0,.18); padding: 2px 8px; border-radius: 10px; margin-left: 10px; font-size: 12px; }
 
 main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 
@@ -39,40 +46,43 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 .flash-ok { background: #e4f3ea; color: var(--ok); border: 1px solid #bfe3cd; }
 .flash-err { background: #fbe6e6; color: var(--danger); border: 1px solid #f0c4c4; }
 
-.panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 22px; }
-.panel h2 { margin: 0 0 14px; font-size: 18px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 22px; }
+.panel h2 { margin: 0 0 14px; font-size: 18px; color: var(--navy); }
 .panel-head { display: flex; align-items: center; justify-content: space-between; }
-.count { display: inline-block; background: var(--primary); color: #fff; border-radius: 20px; font-size: 12px; padding: 1px 9px; margin-left: 6px; vertical-align: middle; }
+.count { display: inline-block; background: var(--azure); color: #fff; border-radius: 20px; font-size: 12px; padding: 1px 9px; margin-left: 6px; vertical-align: middle; }
 .empty { color: var(--muted); font-style: italic; }
 
+.generate { background: var(--cloud); }
 .generate .inline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 label { font-size: 13px; color: var(--muted); display: inline-flex; flex-direction: column; gap: 4px; }
 select { padding: 8px; border-radius: 8px; border: 1px solid var(--line); font-size: 14px; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
 .card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
-.card-img img { width: 100%; display: block; aspect-ratio: 1/1; object-fit: cover; background: #ddd; }
-.noimg { aspect-ratio: 1/1; display: grid; place-items: center; color: var(--muted); background: #eef1f1; }
+.card-img img { width: 100%; display: block; aspect-ratio: 1/1; object-fit: cover; background: var(--navy); }
+.noimg { aspect-ratio: 1/1; display: grid; place-items: center; color: var(--muted); background: var(--cloud); }
 .card-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .pill { padding: 2px 9px; border-radius: 20px; color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
-.pill-news { background: #2b6cb0; }
-.pill-education { background: var(--primary); }
-.pill-trivia { background: #7a56c2; }
-.pill-dad_joke { background: var(--secondary); color: #4a2e00; }
+.pill-news { background: var(--ocean); }
+.pill-education { background: var(--navy); }
+.pill-trivia { background: var(--azure); }
+.pill-dad_joke { background: var(--sky); color: var(--navy); }
 .fbid { color: var(--ok); }
 
-.headline { font-weight: 700; font-size: 15px; }
+.headline { font-weight: 700; font-size: 15px; color: var(--navy); }
 .headline-input { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-weight: 600; }
 textarea { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; }
-.body { white-space: pre-wrap; font-size: 14px; line-height: 1.5; margin: 0; }
+.body { white-space: pre-wrap; font-size: 14px; line-height: 1.5; margin: 0; color: var(--slate); }
 .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .actions form { display: inline; }
 
 .btn { border: 1px solid var(--line); background: #fff; padding: 8px 14px; border-radius: 8px; font-size: 14px; cursor: pointer; }
-.btn:hover { background: #f2f5f5; }
-.btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-.btn.primary:hover { filter: brightness(1.08); }
+.btn:hover { background: var(--cloud); }
+.btn.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+.btn.primary:hover { filter: brightness(1.15); }
+.btn.publish { background: var(--berry); color: #fff; border-color: var(--berry); }
+.btn.publish:hover { filter: brightness(1.06); }
 .btn.ok { background: var(--ok); color: #fff; border-color: var(--ok); }
 .btn.danger { background: #fff; color: var(--danger); border-color: #e6b8b8; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }

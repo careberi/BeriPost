@@ -17,10 +17,12 @@ brand:
   # The soft call-to-action added to the end of most posts.
   # You can use {phone} and {website} as placeholders.
   cta_default: "Follow along for more caregiving tips, or call us at {phone}."
-  # Brand colors used when composing images (hex codes).
+  # Brand colors used when composing images (hex codes). From the Careberi
+  # style guide. Berry is the accent, reserved for the call-to-action.
   colors:
-    primary: "#1F6F6F"     # deep teal - main brand color
-    secondary: "#F4A259"   # warm amber - accent
+    primary: "#16265C"      # navy - main brand color / image background top
+    gradient_to: "#2A5D9F"  # ocean - image background bottom (subtle gradient)
+    secondary: "#D25680"    # berry - accent bar
     text_on_image: "#FFFFFF"
 
 models:

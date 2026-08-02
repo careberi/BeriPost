@@ -35,19 +35,34 @@ def _list_backgrounds(config: Config) -> list[Path]:
     )
 
 
-def _pick_background(config: Config, size: tuple[int, int]) -> Image.Image:
-    """Return a background image cropped to `size`, or a solid brand color."""
+def _gradient(size: tuple[int, int], top: tuple[int, int, int], bottom: tuple[int, int, int]) -> Image.Image:
+    """A smooth vertical gradient from `top` to `bottom`."""
+    width, height = size
+    strip = Image.new("RGB", (1, height))
+    for y in range(height):
+        t = y / max(height - 1, 1)
+        strip.putpixel(
+            (0, y),
+            tuple(round(top[i] + (bottom[i] - top[i]) * t) for i in range(3)),  # type: ignore[arg-type]
+        )
+    return strip.resize(size)
+
+
+def _pick_background(config: Config, size: tuple[int, int]) -> tuple[Image.Image, bool]:
+    """Return (background, used_photo). Falls back to an on-brand gradient."""
     backgrounds = _list_backgrounds(config)
     if backgrounds:
         # Rotate deterministically over time so the feed varies.
         idx = int(time.time() // 60) % len(backgrounds)
         try:
             bg = Image.open(backgrounds[idx]).convert("RGB")
-            return _crop_to_fill(bg, size)
+            return _crop_to_fill(bg, size), True
         except Exception:  # noqa: BLE001
-            log.exception("Failed to open background %s; using solid color.", backgrounds[idx])
-    primary = _hex(config.brand.get("colors", {}).get("primary", ""), "1F6F6F")
-    return Image.new("RGB", size, primary)
+            log.exception("Failed to open background %s; using brand gradient.", backgrounds[idx])
+    colors = config.brand.get("colors", {})
+    top = _hex(colors.get("primary", ""), "16265C")
+    bottom = _hex(colors.get("gradient_to", colors.get("primary", "")), "2A5D9F")
+    return _gradient(size, top, bottom), False
 
 
 def _crop_to_fill(img: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -147,11 +162,13 @@ def compose(config: Config, headline: str, out_path: Path | None = None) -> Path
 
     if config.images.get("generator") == "ai":
         canvas = _ai_background(config, headline, size)
+        used_photo = False
     else:
-        canvas = _pick_background(config, size)
+        canvas, used_photo = _pick_background(config, size)
 
-    # Darken for readability.
-    canvas = ImageEnhance.Brightness(canvas).enhance(0.55)
+    # Darken photos for text readability. The brand gradient is already dark,
+    # so only nudge it slightly.
+    canvas = ImageEnhance.Brightness(canvas).enhance(0.5 if used_photo else 0.9)
 
     draw = ImageDraw.Draw(canvas)
     text_color = _hex(config.brand.get("colors", {}).get("text_on_image", ""), "FFFFFF")

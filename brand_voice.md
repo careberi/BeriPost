@@ -5,9 +5,11 @@ freely to shape how Careberi sounds. Plain English is fine - the writer reads
 it as instructions.
 
 ## Who we are
-Careberi is a New Jersey home care agency. We provide senior care and support
-for children with disabilities. We are the trusted, knowledgeable friend a
-family turns to when they are arranging care for someone they love.
+Careberi (styled "careberi") is a New Jersey agency for Home Health and Home
+Care. We provide senior care and support for children with disabilities. We are
+the trusted, knowledgeable friend a family turns to when they are arranging care
+for someone they love. Our tagline is "Home Health & Home Care." A brand phrase
+we like: "Compassionate care, at home."
 
 ## How we sound
 - Warm, calm, trustworthy, and plain-spoken.
