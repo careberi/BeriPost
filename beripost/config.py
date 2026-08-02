@@ -208,3 +208,11 @@ def get_config() -> Config:
     if _config is None:
         _config = Config()
     return _config
+
+
+def reload_config() -> Config:
+    """Re-read .env and config.yaml (used after the Setup screen saves changes)."""
+    global _config
+    load_dotenv(ROOT / ".env", override=True)
+    _config = Config()
+    return _config

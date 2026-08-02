@@ -22,6 +22,12 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
+def reset_client() -> None:
+    """Drop the cached client so a new API key (from the Setup screen) is used."""
+    global _client
+    _client = None
+
+
 def complete(
     model: str,
     system: str,

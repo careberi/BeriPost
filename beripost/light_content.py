@@ -61,13 +61,20 @@ def make_trivia(config: Config, db: DB) -> dict:
     cta = config.cta()
     system = _system(
         config,
-        "You create light, positive wellness/care TRIVIA for a home care page. Warm and "
+        "You write light TRIVIA QUESTIONS (with the answer) for a home care page. Themes: "
+        "health, wellness, aging well, the human body, history of care, positivity. Warm and "
         "apolitical, no medical advice.",
     )
     prompt = (
-        "Write one short, delightful piece of wellness or care trivia families will enjoy.\n"
-        "title: a hook such as 'Did you know?'. subtitle: the fun fact or a question-and-answer, "
-        "kept to one or two sentences. bullets: empty. body: a friendly caption of the fact, "
+        "Write ONE genuine trivia QUESTION with its answer.\n"
+        "It must be an actual question the reader could try to answer, not a statement or fun "
+        "fact phrased as a sentence.\n"
+        "title: a short hook such as 'Trivia time!' or 'Can you guess?'. "
+        "subtitle: the trivia question itself, as one clear question ending in a question mark. "
+        "bullets: empty. "
+        "body: FIRST write out the full question again word for word (the caption must make "
+        "sense on its own), then a line inviting readers to guess, then a line starting "
+        "'Answer:' with the answer and a one sentence explanation. Warm and short, "
         f"ending with this exact call to action: {cta}"
     )
     return _generate(config, db, "trivia", system, prompt)

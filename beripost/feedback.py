@@ -40,15 +40,22 @@ def load(config: Config) -> str:
         return ""
 
 
+def notes(config: Config) -> list[str]:
+    """The actual feedback notes (bullet lines only), ignoring the header prose."""
+    out = []
+    for line in load(config).splitlines():
+        s = line.strip()
+        if s.startswith("- "):
+            out.append(s[2:].strip())
+    return [n for n in out if n]
+
+
 def as_guidance(config: Config) -> str:
     """The feedback formatted for injection into the writer's system prompt."""
-    text = load(config).strip()
-    if not text:
+    items = notes(config)
+    if not items:
         return ""
-    # Drop the header; keep the notes.
-    body = text.split("\n\n", 2)[-1].strip() if text.startswith("#") else text
-    if not body:
-        return ""
+    body = "\n".join(f"- {n}" for n in items)
     return (
         "\n\n---\n\nFEEDBACK FROM THE PAGE OWNER (apply this to every post; it "
         "overrides earlier guidance where they conflict):\n" + body
@@ -71,9 +78,10 @@ def add(config: Config, text: str) -> None:
 
 def consolidate(config: Config) -> None:
     """Use the cheap model to merge notes into a concise, de-duplicated list."""
-    body = as_guidance(config)
-    if not body:
-        return
+    items = notes(config)
+    if not items:
+        return  # nothing to tidy; never call the model with an empty list
+    body = "\n".join(f"- {n}" for n in items)
     system = (
         "You tidy a list of feedback notes for a social media writer into a short, "
         "clear, de-duplicated set of standing instructions. Keep every distinct point, "
