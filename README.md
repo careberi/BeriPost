@@ -11,6 +11,23 @@ which it remembers and applies to future posts.
 
 ---
 
+## Easiest way to use it: the desktop app
+
+Double-click **`Start BeriPost.bat`** in the project folder. A window opens with buttons:
+
+- **Preview (no posting)** - builds a post and shows the image + caption. Nothing is posted.
+- **Post now** - publishes the chosen post to your Facebook Page (asks you to confirm first).
+- **Give feedback** - type a note; future posts follow it.
+- **Tidy feedback** - clean up your feedback notes.
+- **Open web gallery** - see everything it has posted.
+
+Pick the post type from the dropdown (or "Today's scheduled post"). No commands needed.
+
+- **Put it on your desktop:** right-click `Start BeriPost.bat` -> Show more options -> Send to -> Desktop (create shortcut).
+- **Using PyCharm:** open the project, set the interpreter to the project's `.venv`, then run `gui.py`.
+
+The commands further below still work if you ever want them, but the app covers everyday use. The automatic daily posting (Windows Task Scheduler, section 8 wording below) runs on its own regardless.
+
 ## How it works
 
 Every run, automatically:
