@@ -1,0 +1,2 @@
+# This folder holds the local SQLite database (beripost.db) at runtime.
+# The database itself is git-ignored.

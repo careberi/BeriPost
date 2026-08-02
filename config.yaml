@@ -1,0 +1,61 @@
+# ============================================================================
+#  BeriPost configuration.  Safe to edit by hand. No secrets live here -
+#  secrets go in the .env file. Restart the app after changing this file.
+# ============================================================================
+
+# "review"  -> posts are generated into a local queue for you to approve/edit
+#              before anything goes to Facebook. START HERE.
+# "auto"    -> approved cadence posts publish automatically on schedule.
+mode: review
+
+brand:
+  name: Careberi
+  # TODO: put your real phone number here. It appears in the "call us" CTA.
+  phone: "(555) 555-5555"
+  # TODO: your real website.
+  website: "https://careberi.com"
+  # The soft call-to-action added to the end of most posts.
+  # You can use {phone} and {website} as placeholders.
+  cta_default: "Follow along for more caregiving tips, or call us at {phone}."
+  # Brand colors used when composing images (hex codes).
+  colors:
+    primary: "#1F6F6F"     # deep teal - main brand color
+    secondary: "#F4A259"   # warm amber - accent
+    text_on_image: "#FFFFFF"
+
+models:
+  # Confirmed against Anthropic docs (early 2026).
+  writer: "claude-sonnet-5"    # writes the posts
+  cheap: "claude-haiku-4-5"    # cheap classification / dedup checks
+
+posting:
+  timezone: "America/New_York"
+  time_of_day: "09:30"   # local time the scheduler builds each day's post
+  # Which content pillar to attempt on each day. Use null to skip a day.
+  # Valid pillars: news, education, trivia, dad_joke
+  schedule:
+    monday: news
+    tuesday: education
+    wednesday: trivia
+    thursday: news
+    friday: education
+    saturday: dad_joke
+    sunday: null
+
+images:
+  width: 1080
+  height: 1080
+  generator: templated     # "templated" (free, uses your backgrounds) - AI hook left for later
+  headline_max_chars: 120
+
+sources:
+  max_articles_per_run: 15
+  # RSS feeds for the "news commentary" pillar. Add or remove freely -
+  # one URL per line. See README "Adding RSS feeds".
+  feeds:
+    - https://homehealthcarenews.com/feed/
+    - https://www.mcknightshomecare.com/feed/
+    - https://www.mcknightsseniorliving.com/feed/
+    - https://seniorhousingnews.com/feed/
+    - https://www.disabilityscoop.com/feed/
+    - https://www.nia.nih.gov/news/rss.xml

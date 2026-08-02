@@ -1,0 +1,9 @@
+# BeriPost dependencies
+anthropic>=0.40.0        # Claude API (writing + classification)
+feedparser>=6.0.11       # RSS parsing
+Pillow>=10.3.0           # image composition
+APScheduler>=3.10.4      # scheduling
+python-dotenv>=1.0.1     # load secrets from .env
+PyYAML>=6.0.1            # read config.yaml
+requests>=2.32.0         # Facebook Graph API calls
+Flask>=3.0.3             # local web app interface

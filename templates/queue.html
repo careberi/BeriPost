@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="panel generate">
+  <h2>Create a post</h2>
+  <form method="post" action="{{ url_for('generate') }}" class="inline">
+    <label>Pillar
+      <select name="pillar">
+        {% for p in pillars %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn primary">Generate</button>
+    <span class="hint">Builds one post with Claude and an on-brand image.</span>
+  </form>
+</section>
+
+{% macro post_card(post, editable=false, publishable=false) %}
+  <article class="card">
+    <div class="card-img">
+      {% if post.image_path %}
+        <img src="{{ url_for('image', post_id=post.id) }}" alt="post image">
+      {% else %}
+        <div class="noimg">no image</div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <div class="card-meta">
+        <span class="pill pill-{{ post.pillar }}">{{ post.pillar }}</span>
+        <span class="ts">{{ post.created_at|fmt_time }}</span>
+        {% if post.fb_post_id %}<span class="fbid">FB: {{ post.fb_post_id }}</span>{% endif %}
+        {% if post.error %}<span class="warn">{{ post.error }}</span>{% endif %}
+      </div>
+
+      {% if editable %}
+        <form method="post" action="{{ url_for('edit', post_id=post.id) }}">
+          <input class="headline-input" name="headline" value="{{ post.headline }}"
+                 placeholder="Headline (shown on the image)">
+          <textarea name="body" rows="7" placeholder="Facebook caption">{{ post.body }}</textarea>
+          <div class="row">
+            <button type="submit" class="btn">Save edits</button>
+          </div>
+        </form>
+        <div class="row actions">
+          <form method="post" action="{{ url_for('approve', post_id=post.id) }}">
+            <button class="btn ok" type="submit">Approve</button>
+          </form>
+          <form method="post" action="{{ url_for('reject', post_id=post.id) }}">
+            <button class="btn danger" type="submit">Reject</button>
+          </form>
+        </div>
+      {% else %}
+        {% if post.headline %}<div class="headline">{{ post.headline }}</div>{% endif %}
+        <p class="body">{{ post.body }}</p>
+      {% endif %}
+
+      {% if publishable %}
+        <form method="post" action="{{ url_for('publish_one', post_id=post.id) }}">
+          <button class="btn primary" type="submit"
+                  {% if not fb_ready %}disabled title="Connect Facebook first"{% endif %}>
+            Publish now
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </article>
+{% endmacro %}
+
+<section class="panel">
+  <h2>Pending review <span class="count">{{ pending|length }}</span></h2>
+  {% if pending %}
+    <div class="grid">
+      {% for post in pending %}{{ post_card(post, editable=true) }}{% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">Nothing waiting. Use "Create a post" above to make one.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Approved <span class="count">{{ approved|length }}</span></h2>
+    {% if approved %}
+      <form method="post" action="{{ url_for('publish_approved') }}">
+        <button class="btn primary" type="submit"
+                {% if not fb_ready %}disabled title="Connect Facebook first"{% endif %}>
+          Publish all approved
+        </button>
+      </form>
+    {% endif %}
+  </div>
+  {% if approved %}
+    <div class="grid">
+      {% for post in approved %}{{ post_card(post, publishable=true) }}{% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">Approved posts appear here, ready to publish.</p>
+  {% endif %}
+</section>
+
+{% if failed %}
+<section class="panel">
+  <h2>Failed <span class="count">{{ failed|length }}</span></h2>
+  <div class="grid">
+    {% for post in failed %}{{ post_card(post, publishable=true) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if published %}
+<section class="panel">
+  <h2>Published <span class="count">{{ published|length }}</span></h2>
+  <div class="grid">
+    {% for post in published %}{{ post_card(post) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

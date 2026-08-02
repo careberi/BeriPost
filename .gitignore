@@ -1,0 +1,21 @@
+# Secrets - NEVER commit these
+.env
+
+# Local database and generated files
+data/*.db
+data/*.sqlite3
+generated_images/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
