@@ -21,7 +21,7 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext, simpledialog, ttk
 
 from beripost import config as config_module
-from beripost import feedback, llm, pipeline, settings_io, site
+from beripost import fbauth, feedback, llm, pipeline, settings_io, site
 from beripost.config import get_config
 from beripost.db import DB
 
@@ -48,6 +48,8 @@ ENV_FIELDS_CLAUDE = [("ANTHROPIC_API_KEY", "Claude API key", True)]
 ENV_FIELDS_FB = [
     ("FB_PAGE_ID", "Facebook Page ID", False),
     ("FB_PAGE_ACCESS_TOKEN", "Facebook Page token", True),
+    ("FB_APP_ID", "Facebook App ID", False),
+    ("FB_APP_SECRET", "Facebook App Secret", True),
     ("GRAPH_API_VERSION", "Graph API version", False),
 ]
 ENV_FIELDS_EMAIL = [
@@ -201,6 +203,12 @@ class App:
         self._help(parent, "How to get a Page ID and token: see README section 5 "
                            "(opens developers.facebook.com)", "https://developers.facebook.com/tools/explorer/")
         self._fields(parent, ENV_FIELDS_FB)
+        tk.Label(parent, text="The Explorer token expires in ~1 hour. To make it permanent: paste a "
+                              "USER token above (in the Explorer set 'User or Page' to your own name), "
+                              "add your App ID + App Secret, then click:", bg=PAGE, fg="#4B5563",
+                 wraplength=900, justify="left").pack(anchor="w", padx=18, pady=(4, 2))
+        tk.Button(parent, text="Make token long-lived", command=self.on_make_long_lived
+                  ).pack(anchor="w", padx=18)
 
         self._section(parent, "3. Email copies (optional)")
         self._help(parent, "Gmail: turn on 2-Step Verification, then create an App Password.",
@@ -296,6 +304,35 @@ class App:
             webbrowser.open(readme.resolve().as_uri())
         except Exception:  # noqa: BLE001
             messagebox.showinfo("BeriPost", f"Open this file for full instructions:\n{readme}")
+
+    def on_make_long_lived(self):
+        app_id = self.vars["FB_APP_ID"].get().strip()
+        app_secret = self.vars["FB_APP_SECRET"].get().strip()
+        page_id = self.vars["FB_PAGE_ID"].get().strip()
+        token = self.vars["FB_PAGE_ACCESS_TOKEN"].get().strip()
+        missing = [n for n, v in (("App ID", app_id), ("App Secret", app_secret),
+                                  ("Page ID", page_id), ("token", token)) if not v]
+        if missing:
+            messagebox.showwarning("BeriPost", "First fill in: " + ", ".join(missing))
+            return
+        version = self.vars["GRAPH_API_VERSION"].get().strip() or "v25.0"
+        self._log("Converting to a long-lived Facebook token...")
+
+        def work():
+            return fbauth.make_long_lived_page_token(app_id, app_secret, token, page_id, version)
+
+        def done(result):
+            if isinstance(result, dict):  # _run_bg wrapped an error
+                messagebox.showerror("BeriPost", f"Could not convert the token:\n\n{result.get('error')}")
+                return
+            self.vars["FB_PAGE_ACCESS_TOKEN"].set(result)
+            self.on_save_settings()
+            messagebox.showinfo(
+                "BeriPost",
+                "Done. Your Facebook token is now long-lived (about 60 days, and Page tokens "
+                "from it typically keep working as long as you stay a Page admin). It's saved.")
+
+        self._run_bg(work, done)
 
     # --- shared helpers -----------------------------------------------------
     def _selected_pillar(self):

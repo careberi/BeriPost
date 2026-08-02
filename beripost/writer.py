@@ -62,16 +62,32 @@ def _parse(raw: str) -> dict:
     }
 
 
-def write_news_post(config: Config, item: dict) -> dict:
-    """Original 80-150 word commentary on a news item, plus the source link."""
+def write_news_post(config: Config, item: dict, include_link: bool = True) -> dict:
+    """Original 80-150 word commentary on a news item.
+
+    If include_link is False (a paywalled source), the post comments on the
+    topic but contains no link, so families never hit a paywall.
+    """
     cta = config.cta()
+    if include_link:
+        body_rule = (
+            "body: 80 to 150 words of commentary, then on its own line "
+            f'"Read more: {item["url"]}", then this exact call to action: {cta}'
+        )
+    else:
+        body_rule = (
+            "body: 80 to 150 words of commentary. Do NOT include any link or a 'Read more' "
+            "line, because the source is subscription-only. Refer to it generally (for example "
+            "'a recent industry report'), do not name a website to visit, then end with this "
+            f"exact call to action: {cta}"
+        )
     prompt = (
         "Write an ORIGINAL news-commentary post (pillar 'news').\n"
         "Do NOT copy or closely paraphrase the article. Summarize the gist in your own "
         "words in one sentence, then add Careberi's helpful angle for families.\n"
         "title: a short hook. subtitle: a one-line takeaway families can hold onto. "
-        "bullets: leave empty. body: 80 to 150 words of commentary, then on its own line "
-        f'"Read more: {item["url"]}", then this exact call to action: {cta}\n\n'
+        "bullets: leave empty. "
+        + body_rule + "\n\n"
         f"Article title: {item['title']}\n"
         f"Article summary: {item.get('summary', '')[:800]}\n"
         f"Source: {item.get('source', '')}"

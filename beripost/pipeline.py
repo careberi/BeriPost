@@ -52,8 +52,9 @@ def build_post(config: Config, db: DB, pillar: str) -> dict:
                 result["error"] = "No fresh, on-brand news articles found right now."
                 return result
             item = items[0]
-            post = writer.write_news_post(config, item)
-            result["source_url"] = item["url"]
+            include_link = config.should_link(item["url"])
+            post = writer.write_news_post(config, item, include_link=include_link)
+            result["source_url"] = item["url"] if include_link else None
             db.mark_article_used(item["guid"])
         elif pillar == "education":
             post = writer.write_education_post(config)

@@ -116,6 +116,28 @@ class Config:
     def feeds(self) -> list[str]:
         return list(self.sources.get("feeds", []))
 
+    @property
+    def no_link_domains(self) -> list[str]:
+        """Paywalled sources: we may comment on them, but never link to them."""
+        default = ["seniorhousingnews.com", "homehealthcarenews.com"]
+        return list(self.sources.get("no_link_domains", default))
+
+    def should_link(self, url: str) -> bool:
+        """False if the article's site is paywalled (so we omit the link)."""
+        from urllib.parse import urlparse
+
+        try:
+            host = urlparse(url).netloc.lower()
+        except Exception:  # noqa: BLE001
+            return True
+        if host.startswith("www."):
+            host = host[4:]
+        for domain in self.no_link_domains:
+            d = domain.lower().strip()
+            if d and (host == d or host.endswith("." + d)):
+                return False
+        return True
+
     def cta(self) -> str:
         """The default call-to-action text with {phone}/{website} filled in."""
         template = self.brand.get("cta_default", "")
@@ -146,6 +168,15 @@ class Config:
     @property
     def graph_version(self) -> str:
         return os.environ.get("GRAPH_API_VERSION", "v25.0")
+
+    # App ID / Secret are only used to convert a token to a long-lived one.
+    @property
+    def fb_app_id(self) -> str | None:
+        return os.environ.get("FB_APP_ID")
+
+    @property
+    def fb_app_secret(self) -> str | None:
+        return os.environ.get("FB_APP_SECRET")
 
     # Email notification (SMTP) secrets from .env.
     @property
