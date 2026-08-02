@@ -82,6 +82,37 @@ class Config:
         return self._data.get("site", {})
 
     @property
+    def seo(self) -> dict:
+        return self._data.get("seo", {})
+
+    def seo_guidance(self) -> str:
+        """Local-SEO guidance for the writer, built from config.yaml `seo:`.
+
+        Deliberately gentle: weave in the service area and search-friendly
+        phrasing only where it reads naturally. Never keyword-stuff.
+        """
+        s = self.seo
+        if not s or not s.get("enabled", True):
+            return ""
+        area = s.get("service_area", "")
+        locations = ", ".join(s.get("locations", []))
+        keywords = ", ".join(s.get("keywords", []))
+        hashtags = " ".join(s.get("hashtags", []))
+        lines = [
+            "\n\n---\n\nLOCAL SEO (apply naturally, never keyword-stuff, keep the warm brand voice):"
+        ]
+        if area:
+            lines.append(f"- Careberi serves {area}. Mention the service area naturally when it fits.")
+        if locations:
+            lines.append(f"- Areas served (reference one when relevant, never list them all): {locations}.")
+        if keywords:
+            lines.append(f"- Where it reads naturally, use plain search phrases families use, such as: {keywords}.")
+        if hashtags:
+            lines.append(f"- End the post with 3 to 5 relevant hashtags chosen from: {hashtags}.")
+        lines.append("- Never sacrifice warmth or sound salesy for the sake of keywords.")
+        return "\n".join(lines)
+
+    @property
     def feeds(self) -> list[str]:
         return list(self.sources.get("feeds", []))
 

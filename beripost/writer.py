@@ -34,7 +34,8 @@ _JSON_RULES = (
 
 
 def _system(config: Config) -> str:
-    return config.brand_voice() + feedback.as_guidance(config) + _JSON_RULES
+    return (config.brand_voice() + feedback.as_guidance(config)
+            + config.seo_guidance() + _JSON_RULES)
 
 
 def _parse(raw: str) -> dict:
