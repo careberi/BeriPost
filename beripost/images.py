@@ -1,11 +1,11 @@
-"""Compose an on-brand square image with Pillow.
+"""Compose an on-brand "card" graphic with Pillow, in the Careberi brand.
 
-Pipeline: pick a background (rotating through assets/backgrounds) -> crop to a
-square -> darken for text readability -> draw the headline in the brand font ->
-overlay the logo. Cost is zero because it uses your own backgrounds.
+Every part (title, tips, colors, logo, call-to-action) is drawn by code, so the
+text is always correct and on-brand. Layout: a light brand wash, the logo and
+wordmark up top, a navy title, an ocean card holding either bullet tips or a
+short supporting line, and a berry call-to-action chip.
 
-A clean hook is left for swapping in an AI image generator later: implement
-`_ai_background()` and set images.generator: ai in config.yaml.
+Fonts: Poppins (from assets/fonts). Falls back to a system font if missing.
 """
 from __future__ import annotations
 
@@ -13,112 +13,67 @@ import logging
 import time
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from .config import Config
 
 log = logging.getLogger(__name__)
 
-_VALID_BG = {".jpg", ".jpeg", ".png", ".webp"}
+# Brand palette defaults (overridable via config.yaml brand.colors).
+_DEFAULTS = {
+    "navy": "16265C", "ocean": "2A5D9F", "azure": "2F80C2",
+    "sky": "5AA9DE", "ice": "93CDEC", "berry": "D25680",
+    "cloud": "F4F8FC", "muted": "6B7280",
+}
+
+_FONT_FILES = {
+    "bold": "Poppins-Bold.ttf",
+    "semibold": "Poppins-SemiBold.ttf",
+    "medium": "Poppins-Medium.ttf",
+    "regular": "Poppins-Regular.ttf",
+}
+_FALLBACK = {
+    "bold": r"C:\Windows\Fonts\arialbd.ttf",
+    "semibold": r"C:\Windows\Fonts\arialbd.ttf",
+    "medium": r"C:\Windows\Fonts\arial.ttf",
+    "regular": r"C:\Windows\Fonts\arial.ttf",
+}
 
 
-def _hex(color: str, default: str) -> tuple[int, int, int]:
-    color = (color or default).lstrip("#")
-    return tuple(int(color[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+def _hex(value: str, default_key: str) -> tuple[int, int, int]:
+    value = (value or _DEFAULTS[default_key]).lstrip("#")
+    return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
-def _list_backgrounds(config: Config) -> list[Path]:
-    if not config.backgrounds_dir.exists():
-        return []
-    return sorted(
-        p for p in config.backgrounds_dir.iterdir() if p.suffix.lower() in _VALID_BG
-    )
+def _colors(config: Config) -> dict:
+    c = config.brand.get("colors", {})
+    return {
+        "navy": _hex(c.get("primary", ""), "navy"),
+        "ocean": _hex(c.get("gradient_to", ""), "ocean"),
+        "azure": _hex("", "azure"),
+        "sky": _hex("", "sky"),
+        "ice": _hex("", "ice"),
+        "berry": _hex(c.get("secondary", ""), "berry"),
+        "cloud": _hex("", "cloud"),
+        "muted": _hex("", "muted"),
+    }
 
 
-def _gradient(size: tuple[int, int], top: tuple[int, int, int], bottom: tuple[int, int, int]) -> Image.Image:
-    """A smooth vertical gradient from `top` to `bottom`."""
-    width, height = size
-    strip = Image.new("RGB", (1, height))
-    for y in range(height):
-        t = y / max(height - 1, 1)
-        strip.putpixel(
-            (0, y),
-            tuple(round(top[i] + (bottom[i] - top[i]) * t) for i in range(3)),  # type: ignore[arg-type]
-        )
-    return strip.resize(size)
-
-
-def _pick_background(config: Config, size: tuple[int, int]) -> tuple[Image.Image, bool]:
-    """Return (background, used_photo). Falls back to an on-brand gradient."""
-    backgrounds = _list_backgrounds(config)
-    if backgrounds:
-        # Rotate deterministically over time so the feed varies.
-        idx = int(time.time() // 60) % len(backgrounds)
-        try:
-            bg = Image.open(backgrounds[idx]).convert("RGB")
-            return _crop_to_fill(bg, size), True
-        except Exception:  # noqa: BLE001
-            log.exception("Failed to open background %s; using brand gradient.", backgrounds[idx])
-    colors = config.brand.get("colors", {})
-    top = _hex(colors.get("primary", ""), "16265C")
-    bottom = _hex(colors.get("gradient_to", colors.get("primary", "")), "2A5D9F")
-    return _gradient(size, top, bottom), False
-
-
-def _crop_to_fill(img: Image.Image, size: tuple[int, int]) -> Image.Image:
-    target_w, target_h = size
-    src_w, src_h = img.size
-    scale = max(target_w / src_w, target_h / src_h)
-    new = img.resize((int(src_w * scale), int(src_h * scale)))
-    left = (new.width - target_w) // 2
-    top = (new.height - target_h) // 2
-    return new.crop((left, top, left + target_w, top + target_h))
-
-
-# Well-known scalable fonts to try, in order, across operating systems.
-_BOLD_CANDIDATES = [
-    r"C:\Windows\Fonts\arialbd.ttf",
-    r"C:\Windows\Fonts\segoeuib.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "/Library/Fonts/Arial Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "DejaVuSans-Bold.ttf",
-    "Arial Bold.ttf",
-]
-_REGULAR_CANDIDATES = [
-    r"C:\Windows\Fonts\arial.ttf",
-    r"C:\Windows\Fonts\segoeui.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/Library/Fonts/Arial.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "DejaVuSans.ttf",
-    "Arial.ttf",
-]
-
-
-def _load_font(config: Config, bold: bool, size: int) -> ImageFont.ImageFont:
-    # 1. A brand font the user dropped in assets/fonts.
-    custom = config.fonts_dir / ("headline.ttf" if bold else "body.ttf")
-    candidates = [str(custom)] if custom.exists() else []
-    # 2. Common system fonts.
-    candidates += _BOLD_CANDIDATES if bold else _REGULAR_CANDIDATES
-    for path in candidates:
+def _font(config: Config, weight: str, size: int) -> ImageFont.ImageFont:
+    for path in (str(config.fonts_dir / _FONT_FILES[weight]), _FALLBACK[weight]):
         try:
             return ImageFont.truetype(path, size)
-        except Exception:  # noqa: BLE001 - try the next candidate
+        except Exception:  # noqa: BLE001
             continue
-    # 3. Pillow's built-in default. Newer Pillow scales it with `size`.
     try:
-        return ImageFont.load_default(size=size)  # Pillow >= 10.1
+        return ImageFont.load_default(size=size)
     except TypeError:
         return ImageFont.load_default()
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
-    words = text.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
+    lines, current = [], ""
+    for word in text.split():
         trial = f"{current} {word}".strip()
         if draw.textlength(trial, font=font) <= max_width:
             current = trial
@@ -131,89 +86,130 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[st
     return lines
 
 
-def _add_logo(config: Config, canvas: Image.Image) -> None:
-    if not config.logo_path.exists():
-        return
-    try:
-        logo = Image.open(config.logo_path).convert("RGBA")
-        target_w = canvas.width // 4
-        scale = target_w / logo.width
-        logo = logo.resize((target_w, int(logo.height * scale)))
-        margin = canvas.width // 25
-        pos = (canvas.width - logo.width - margin, canvas.height - logo.height - margin)
-        canvas.paste(logo, pos, logo)
-    except Exception:  # noqa: BLE001
-        log.exception("Could not overlay logo; continuing without it.")
+def _wash(size: tuple[int, int], top: tuple[int, int, int], bottom: tuple[int, int, int]) -> Image.Image:
+    w, h = size
+    strip = Image.new("RGB", (1, h))
+    for y in range(h):
+        t = min((y / max(h - 1, 1)) * 1.4, 1.0)
+        strip.putpixel((0, y), tuple(round(top[i] + (bottom[i] - top[i]) * t) for i in range(3)))  # type: ignore[arg-type]
+    return strip.resize(size)
 
 
-def _ai_background(config: Config, headline: str, size):
-    """Hook for a future AI image-generation backend. Not used by default."""
-    raise NotImplementedError(
-        "AI image generation is not wired up. Set images.generator back to 'templated', "
-        "or implement this function to call an image API and return a PIL Image."
-    )
+def _header(config: Config, img: Image.Image, draw: ImageDraw.ImageDraw, col: dict, margin: int) -> int:
+    """Draw the logo + wordmark + tagline. Returns the y below the header."""
+    x = margin
+    top = 64
+    logo_bottom = top
+    if config.logo_path.exists():
+        try:
+            logo = Image.open(config.logo_path).convert("RGBA")
+            lh = 96
+            lw = int(logo.width * lh / logo.height)
+            logo = logo.resize((lw, lh))
+            img.paste(logo, (x, top), logo)
+            x += lw + 22
+            logo_bottom = top + lh
+        except Exception:  # noqa: BLE001
+            log.exception("Could not place logo on image.")
+    name_font = _font(config, "bold", 52)
+    draw.text((x, top + 6), "care", font=name_font, fill=col["navy"])
+    care_w = draw.textlength("care", font=name_font)
+    draw.text((x + care_w, top + 6), "beri", font=name_font, fill=col["azure"])
+    tag = config.brand.get("tagline", "Home Health & Home Care").upper()
+    draw.text((x + 2, top + 70), tag, font=_font(config, "medium", 17), fill=col["muted"])
+    return max(logo_bottom, top + 96) + 40
 
 
-def compose(config: Config, headline: str, out_path: Path | None = None) -> Path:
-    """Build the post image and save it. Returns the saved path."""
+def compose(
+    config: Config,
+    title: str,
+    subtitle: str | None = None,
+    bullets: list[str] | None = None,
+    out_path: Path | None = None,
+) -> Path:
+    """Build the branded card image and save it. Returns the saved path."""
     width = int(config.images.get("width", 1080))
     height = int(config.images.get("height", 1080))
-    size = (width, height)
+    col = _colors(config)
+    margin = width // 13
 
-    if config.images.get("generator") == "ai":
-        canvas = _ai_background(config, headline, size)
-        used_photo = False
-    else:
-        canvas, used_photo = _pick_background(config, size)
+    img = _wash((width, height), col["ice"], col["cloud"])
+    draw = ImageDraw.Draw(img)
 
-    # Darken photos for text readability. The brand gradient is already dark,
-    # so only nudge it slightly.
-    canvas = ImageEnhance.Brightness(canvas).enhance(0.5 if used_photo else 0.9)
+    title = (title or config.brand.get("name", "Careberi")).strip()
+    bullets = [b.strip() for b in (bullets or []) if b.strip()]
 
-    draw = ImageDraw.Draw(canvas)
-    text_color = _hex(config.brand.get("colors", {}).get("text_on_image", ""), "FFFFFF")
+    y = _header(config, img, draw, col, margin)
 
-    headline = (headline or config.brand.get("name", "Careberi")).strip()
-    max_chars = int(config.images.get("headline_max_chars", 120))
-    if len(headline) > max_chars:
-        headline = headline[: max_chars - 1].rstrip() + "…"
-
-    # Fit the headline: shrink font until it fits comfortably.
-    margin = width // 10
+    # Title (auto-shrink to fit a few lines).
     box_w = width - 2 * margin
-    font_size = width // 9
-    while font_size > 24:
-        font = _load_font(config, bold=True, size=font_size)
-        lines = _wrap(draw, headline, font, box_w)
-        line_h = font_size + font_size // 4
-        total_h = line_h * len(lines)
-        if total_h <= height * 0.6 and len(lines) <= 6:
+    size = 62
+    while size > 34:
+        tf = _font(config, "bold", size)
+        tlines = _wrap(draw, title, tf, box_w)
+        if len(tlines) <= 3:
             break
-        font_size -= 4
-
-    font = _load_font(config, bold=True, size=font_size)
-    lines = _wrap(draw, headline, font, box_w)
-    line_h = font_size + font_size // 4
-    total_h = line_h * len(lines)
-    y = (height - total_h) // 2
-
-    for line in lines:
-        w = draw.textlength(line, font=font)
-        x = (width - w) // 2
-        # subtle shadow for contrast
-        draw.text((x + 2, y + 2), line, font=font, fill=(0, 0, 0))
-        draw.text((x, y), line, font=font, fill=text_color)
+        size -= 4
+    tf = _font(config, "bold", size)
+    tlines = _wrap(draw, title, tf, box_w)
+    line_h = int(size * 1.2)
+    for ln in tlines:
+        draw.text((margin, y), ln, font=tf, fill=col["navy"])
         y += line_h
+    y += 24
 
-    # Accent bar at the bottom in the brand secondary color.
-    accent = _hex(config.brand.get("colors", {}).get("secondary", ""), "F4A259")
-    draw.rectangle([0, height - height // 40, width, height], fill=accent)
+    # Card. Measure the content first so the card hugs it.
+    cx0, cx1 = margin, width - margin
+    cy0 = y
+    pad = 48
+    tx = cx0 + pad
+    inner = cx1 - cx0 - 2 * pad
+    white = (255, 255, 255)
+    faint = (232, 240, 250)
 
-    _add_logo(config, canvas)
+    items: list[dict] = []
+    if bullets:
+        if subtitle:
+            hf = _font(config, "semibold", 38)
+            items.append({"kind": "head", "font": hf, "lines": _wrap(draw, subtitle, hf, inner),
+                          "lh": 48, "gap": 16, "fill": white})
+        bf = _font(config, "regular", 32)
+        for tip in bullets:
+            items.append({"kind": "bullet", "font": bf, "lines": _wrap(draw, tip, bf, inner - 40),
+                          "lh": 42, "gap": 14, "fill": faint})
+    elif subtitle:
+        bf = _font(config, "regular", 34)
+        items.append({"kind": "para", "font": bf, "lines": _wrap(draw, subtitle, bf, inner),
+                      "lh": 46, "gap": 0, "fill": faint})
+
+    content_h = sum(len(it["lines"]) * it["lh"] + it["gap"] for it in items)
+    card_h = content_h + 2 * pad
+    max_bottom = height - 168
+    cy1 = cy0 + min(max(card_h, 200), max_bottom - cy0)
+    draw.rounded_rectangle([cx0, cy0, cx1, cy1], radius=34, fill=col["ocean"])
+
+    ty = cy0 + pad
+    for it in items:
+        for i, ln in enumerate(it["lines"]):
+            if it["kind"] == "bullet" and i == 0:
+                draw.ellipse([tx, ty + 11, tx + 16, ty + 27], fill=col["ice"])
+            x = tx + 40 if it["kind"] == "bullet" else tx
+            draw.text((x, ty), ln, font=it["font"], fill=it["fill"])
+            ty += it["lh"]
+        ty += it["gap"]
+
+    # Berry call-to-action chip.
+    phone = config.brand.get("phone", "")
+    chip = f"Call us at {phone}" if phone else "Follow for more caregiving tips"
+    cf = _font(config, "bold", 30)
+    cw = draw.textlength(chip, font=cf)
+    chy0 = height - 120
+    draw.rounded_rectangle([margin, chy0, margin + cw + 56, chy0 + 62], radius=31, fill=col["berry"])
+    draw.text((margin + 28, chy0 + 14), chip, font=cf, fill=white)
 
     if out_path is None:
         out_path = config.images_dir / f"post_{int(time.time())}.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(out_path, "PNG")
-    log.info("Composed image saved to %s", out_path)
+    img.save(out_path, "PNG")
+    log.info("Composed card image saved to %s", out_path)
     return out_path

@@ -70,8 +70,16 @@ class Config:
         return self._data.get("images", {})
 
     @property
+    def images_enabled(self) -> bool:
+        return bool(self.images.get("enabled", True))
+
+    @property
     def sources(self) -> dict:
         return self._data.get("sources", {})
+
+    @property
+    def site(self) -> dict:
+        return self._data.get("site", {})
 
     @property
     def feeds(self) -> list[str]:
@@ -108,9 +116,36 @@ class Config:
     def graph_version(self) -> str:
         return os.environ.get("GRAPH_API_VERSION", "v25.0")
 
+    # Email notification (SMTP) secrets from .env.
     @property
-    def flask_secret(self) -> str:
-        return os.environ.get("FLASK_SECRET_KEY", "dev-insecure-key")
+    def smtp_host(self) -> str | None:
+        return os.environ.get("SMTP_HOST")
+
+    @property
+    def smtp_port(self) -> int:
+        return int(os.environ.get("SMTP_PORT", "587"))
+
+    @property
+    def smtp_user(self) -> str | None:
+        return os.environ.get("SMTP_USER")
+
+    @property
+    def smtp_pass(self) -> str | None:
+        return os.environ.get("SMTP_PASS")
+
+    @property
+    def notify_to(self) -> str | None:
+        return os.environ.get("NOTIFY_TO")
+
+    @property
+    def email_ready(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_pass and self.notify_to)
+
+    # Optional GitHub token (only needed to auto-close feedback issues, or for
+    # a private repo). Reading public feedback issues needs no token.
+    @property
+    def github_token(self) -> str | None:
+        return os.environ.get("GITHUB_TOKEN")
 
     def require_anthropic(self) -> None:
         if not self.anthropic_api_key:

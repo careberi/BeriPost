@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""BeriPost command line.
+"""BeriPost command line (hands-off edition).
 
-Examples:
-    python run.py generate --pillar news        # build one post, route by mode
-    python run.py generate --pillar dad_joke --dry-run   # build + print, post nothing
-    python run.py dry-run                        # build today's scheduled pillar, print it
-    python run.py publish-queue                  # publish everything marked 'approved'
-    python run.py run-scheduler                  # run the daily scheduler (blocks)
-    python run.py web                            # start the local web app
+Everyday use is automatic (Windows Task Scheduler runs `run-today`). These
+commands are here when you want them:
+
+    python run.py run-today               # build + post today's scheduled post
+    python run.py post --pillar news      # build + post one specific pillar now
+    python run.py dry-run                  # build today's post and print it, post nothing
+    python run.py feedback "keep it short" # teach the bot; applies to future posts
+    python run.py tidy-feedback            # tidy the feedback notes into a clean list
+    python run.py build-site               # rebuild the web gallery from history
+    python run.py run-scheduler            # keep running and post daily (alternative)
 """
 from __future__ import annotations
 
@@ -15,9 +18,9 @@ import argparse
 import logging
 import sys
 
+from beripost import feedback, pipeline, scheduler, site
 from beripost.config import ConfigError, get_config
 from beripost.db import DB
-from beripost import pipeline, scheduler
 
 
 def _setup_logging() -> None:
@@ -30,62 +33,72 @@ def _setup_logging() -> None:
 
 def _print_post(result: dict) -> None:
     line = "=" * 70
-    print(f"\n{line}")
-    print(f"PILLAR : {result.get('pillar')}")
+    print(f"\n{line}\nPILLAR : {result.get('pillar')}")
     if result.get("source_url"):
         print(f"SOURCE : {result['source_url']}")
     print(f"IMAGE  : {result.get('image_path')}")
-    print(f"HEADLINE (on image): {result.get('headline')}")
-    print(f"{line}\nCAPTION:\n")
-    print(result.get("body", ""))
-    print(line)
+    print(f"TITLE  : {result.get('title')}")
+    print(f"{line}\nCAPTION:\n\n{result.get('body', '')}\n{line}")
 
 
-def cmd_generate(config, db, args) -> int:
-    result = pipeline.generate(config, db, args.pillar, dry_run=args.dry_run)
+def cmd_run_today(config, db, args) -> int:
+    result = pipeline.run_once(config, db, dry_run=False)
+    if result.get("skipped"):
+        print("No pillar scheduled for today. Nothing posted.")
+        return 0
     if not result.get("ok"):
         print(f"Could not build post: {result.get('error')}", file=sys.stderr)
         return 1
     _print_post(result)
-    if args.dry_run:
-        print("\n(dry run: nothing was saved or posted)")
-    elif config.mode == "auto":
-        print(f"\nMode=auto -> status: {result.get('status')}")
-        if result.get("error"):
-            print(f"Publish error: {result['error']}", file=sys.stderr)
-    else:
-        print(f"\nMode=review -> saved to the queue as pending (post id {result.get('post_id')}).")
-        print("Open the web app to approve it:  python run.py web")
+    print(f"\nStatus: {result.get('status')}")
+    if result.get("error"):
+        print(f"Note: {result['error']}", file=sys.stderr)
     return 0
+
+
+def cmd_post(config, db, args) -> int:
+    result = pipeline.run_once(config, db, pillar=args.pillar, dry_run=False)
+    if not result.get("ok"):
+        print(f"Could not build post: {result.get('error')}", file=sys.stderr)
+        return 1
+    _print_post(result)
+    print(f"\nStatus: {result.get('status')}")
+    return 0 if result.get("status") != "failed" else 1
 
 
 def cmd_dry_run(config, db, args) -> int:
-    import datetime as _dt
-
-    pillar = scheduler._pillar_for_today(config, _dt.datetime.now().weekday())
+    pillar = args.pillar or pipeline.pillar_for_today(config)
     if not pillar:
-        print("No pillar is scheduled for today in config.yaml.")
+        print("No pillar scheduled for today in config.yaml.")
         return 0
-    result = pipeline.generate(config, db, pillar, dry_run=True)
+    result = pipeline.run_once(config, db, pillar=pillar, dry_run=True)
     if not result.get("ok"):
         print(f"Could not build post: {result.get('error')}", file=sys.stderr)
         return 1
     _print_post(result)
-    print("\n(dry run: nothing was saved or posted)")
+    print("\n(dry run: nothing was posted, emailed, or pushed)")
     return 0
 
 
-def cmd_publish_queue(config, db, args) -> int:
-    config.require_facebook()
-    results = pipeline.publish_approved(config, db)
-    if not results:
-        print("Nothing approved to publish.")
-        return 0
-    ok = sum(1 for r in results if r.get("ok"))
-    print(f"Published {ok}/{len(results)} approved posts.")
-    for r in results:
-        if not r.get("ok"):
-            print(f"  post {r.get('post_id')} failed: {r.get('error')}", file=sys.stderr)
+def cmd_feedback(config, db, args) -> int:
+    note = " ".join(args.text).strip()
+    if not note:
+        print("Nothing to add. Example: python run.py feedback \"keep posts under 100 words\"")
+        return 1
+    feedback.add(config, note)
+    print("Saved. Future posts will take this into account.")
+    return 0
+
+
+def cmd_tidy_feedback(config, db, args) -> int:
+    feedback.consolidate(config)
+    print("Feedback notes tidied. See feedback.md.")
+    return 0
+
+
+def cmd_build_site(config, db, args) -> int:
+    out = site.build(config, db)
+    print(f"Gallery written to {out}")
     return 0
 
 
@@ -94,41 +107,30 @@ def cmd_run_scheduler(config, db, args) -> int:
     return 0
 
 
-def cmd_web(config, db, args) -> int:
-    from app import create_app
-
-    app = create_app()
-    print("Starting BeriPost web app at http://127.0.0.1:5000  (Ctrl+C to stop)")
-    app.run(host="127.0.0.1", port=args.port, debug=False)
-    return 0
-
-
 def main() -> int:
     _setup_logging()
-    parser = argparse.ArgumentParser(prog="run.py", description="BeriPost control panel")
+    parser = argparse.ArgumentParser(prog="run.py", description="BeriPost control")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    g = sub.add_parser("generate", help="build one post for a pillar")
-    g.add_argument("--pillar", required=True,
-                   choices=["news", "education", "trivia", "dad_joke"])
-    g.add_argument("--dry-run", action="store_true", help="build and print only, post nothing")
-    g.set_defaults(func=cmd_generate)
+    sub.add_parser("run-today", help="build + post today's scheduled post").set_defaults(func=cmd_run_today)
 
-    d = sub.add_parser("dry-run", help="build today's scheduled post and print it (no posting)")
+    p = sub.add_parser("post", help="build + post one specific pillar now")
+    p.add_argument("--pillar", required=True, choices=list(pipeline.PILLARS))
+    p.set_defaults(func=cmd_post)
+
+    d = sub.add_parser("dry-run", help="build a post and print it, post nothing")
+    d.add_argument("--pillar", choices=list(pipeline.PILLARS), default=None)
     d.set_defaults(func=cmd_dry_run)
 
-    p = sub.add_parser("publish-queue", help="publish all approved posts")
-    p.set_defaults(func=cmd_publish_queue)
+    f = sub.add_parser("feedback", help="teach the bot; applies to future posts")
+    f.add_argument("text", nargs="+", help="your feedback, in quotes")
+    f.set_defaults(func=cmd_feedback)
 
-    s = sub.add_parser("run-scheduler", help="run the daily scheduler (blocks)")
-    s.set_defaults(func=cmd_run_scheduler)
-
-    w = sub.add_parser("web", help="start the local web app")
-    w.add_argument("--port", type=int, default=5000)
-    w.set_defaults(func=cmd_web)
+    sub.add_parser("tidy-feedback", help="tidy feedback notes into a clean list").set_defaults(func=cmd_tidy_feedback)
+    sub.add_parser("build-site", help="rebuild the web gallery").set_defaults(func=cmd_build_site)
+    sub.add_parser("run-scheduler", help="keep running and post daily").set_defaults(func=cmd_run_scheduler)
 
     args = parser.parse_args()
-
     try:
         config = get_config()
         config.require_anthropic()

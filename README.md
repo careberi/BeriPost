@@ -1,189 +1,185 @@
 # BeriPost
 
-An autonomous Facebook content engine for **Careberi**. It sources home care and
-disability care news, writes original commentary in the Careberi brand voice,
-mixes in light trivia and dad jokes, builds an on-brand image for each post, and
-publishes to your Facebook Page a few times a week. You review everything from a
-simple local web page before anything goes live.
+A hands-off Facebook content engine for **Careberi**. On a schedule it writes an
+original, on-brand post, builds a branded card image, posts it to your Facebook
+Page, emails you a copy, and updates a web gallery you can browse anytime. You
+never have to approve anything. You can steer it with plain-English feedback,
+which it remembers and applies to future posts.
 
-> **New to all this?** That's fine. Follow the steps top to bottom. Every command
-> is copy-paste. You do not need to understand the code.
+> **New to all this?** Follow the steps top to bottom. Every command is
+> copy-paste. You do not need to understand the code.
 
 ---
 
-## What it does
+## How it works
 
-Four kinds of posts ("pillars"), rotated across the week:
+Every run, automatically:
 
-1. **News commentary** — pulls recent articles from trusted RSS feeds and writes
-   original, family-focused commentary (never copies the article), with a link.
-2. **Family education** — evergreen, reassuring posts about what good home care
-   looks like, questions to ask, what to expect. No fear, no knocking competitors.
-3. **Trivia** — light care/health/wellness/positivity trivia.
-4. **Dad jokes** — clean, warm, apolitical.
+1. Folds in any new **feedback** you have given.
+2. Writes the day's post (rotating across the content pillars below).
+3. Builds the **branded card image** (your logo, colors, and Poppins font).
+4. **Posts it to your Facebook Page.**
+5. **Emails you a copy.**
+6. Adds it to your **web gallery** and pushes it to GitHub, so the gallery updates.
 
-Two modes:
+Content pillars (set the weekly plan in `config.yaml`):
 
-- **review** (default) — posts are generated into a local queue for you to
-  approve or edit first. **Nothing goes to Facebook without your click.**
-- **auto** — approved cadence posts publish automatically on schedule.
+- **News commentary** - original, family-focused take on a recent home care / senior care / disability news article, with a link.
+- **Family education** - reassuring tips on what good care looks like, questions to ask, what to expect. No fear, no knocking competitors.
+- **Trivia** - light care/health/wellness facts.
+- **Dad jokes** - clean, warm, apolitical.
 
-Start in **review** for a couple of weeks, then flip to **auto** when you trust it.
+Where things live:
+
+```
+BeriPost/
+├─ run.py                # the command line
+├─ config.yaml           # all settings (schedule, brand, feeds, site) - no secrets
+├─ brand_voice.md        # how the posts should sound (edit freely)
+├─ feedback.md           # your feedback memory (auto-updated; you can edit too)
+├─ .env                  # your secrets (you create this; never shared)
+├─ beripost/             # the engine (news, writer, images, publisher, email, site, feedback)
+├─ assets/               # your logo (assets/logo/logo.png) and Poppins fonts
+├─ docs/                 # the web gallery that GitHub Pages serves
+└─ data/                 # local database (created at runtime)
+```
 
 ---
 
 ## 1. One-time setup
 
-### 1a. Install Python
-Install **Python 3.11 or newer** from <https://www.python.org/downloads/>.
-On Windows, tick **"Add Python to PATH"** in the installer.
+### 1a. Python and libraries
+Python 3.11+ is required. It is likely already installed. To set up the project
+workspace and libraries (once):
 
-Check it worked (open PowerShell / Terminal):
-```bash
-python --version
-```
-
-### 1b. Get the project and install dependencies
-In the `BeriPost` folder, create a private workspace and install the libraries:
 ```bash
 python -m venv .venv
 ```
-Activate it:
-- Windows (PowerShell): `.\.venv\Scripts\Activate.ps1`
+Activate it, then install:
+- Windows PowerShell: `.\.venv\Scripts\Activate.ps1`
 - Mac/Linux: `source .venv/bin/activate`
 
-Then:
 ```bash
 pip install -r requirements.txt
 ```
 
-### 1c. Create your secrets file
-Copy `.env.example` to a new file named `.env`, then open `.env` and fill in the
-values. You need at minimum your Anthropic key to generate posts; Facebook keys
-are only needed to actually publish.
+> On Windows you can also skip activating and just run commands with
+> `.\.venv\Scripts\python.exe run.py ...`
+
+### 1b. Secrets
+Copy `.env.example` to `.env` and fill in the values you have. Minimum to write
+posts is the Anthropic key. Facebook and email are needed to post and notify.
 
 ```bash
-# Windows PowerShell
-Copy-Item .env.example .env
-# Mac/Linux
-cp .env.example .env
+Copy-Item .env.example .env    # Windows  (Mac/Linux: cp .env.example .env)
+notepad .env
 ```
 
-- `ANTHROPIC_API_KEY` — from <https://console.anthropic.com/> → Settings → API Keys.
-- `FB_PAGE_ID`, `FB_PAGE_ACCESS_TOKEN` — see section 4 below.
+- `ANTHROPIC_API_KEY` - from <https://console.anthropic.com/> (Settings -> API Keys).
+- `FB_PAGE_ID`, `FB_PAGE_ACCESS_TOKEN` - see section 4.
+- `SMTP_*` and `NOTIFY_TO` - see section 5 (email copies).
 
-### 1d. Add your brand assets
-- Put background photos in `assets/backgrounds/` (see the README in that folder).
-- Put your logo at `assets/logo/logo.png`.
+### 1c. Your brand
+- Logo is already generated at `assets/logo/logo.png` (from your brand vectors). Replace it with an official file anytime.
+- Poppins fonts are installed in `assets/fonts/`.
+- Set your real **phone** and **website** in `config.yaml` under `brand:`.
 
-Both are optional to start — BeriPost falls back to a plain brand-color image.
-
-### 1e. Set your phone number and website
-Open `config.yaml` and set your real **phone** and **website** under `brand:`.
-These appear in the "call us" call-to-action at the end of posts.
+### 1d. Try it (nothing is posted)
+```bash
+python run.py dry-run
+```
+This writes today's post and prints it, and saves the image to `generated_images/`. It does not post, email, or push. Try a specific type: `python run.py dry-run --pillar education`.
 
 ---
 
-## 2. Try it out (nothing gets posted)
+## 2. Posting
 
-Generate one post and just print it to the screen:
+Post today's scheduled pillar right now:
 ```bash
-python run.py generate --pillar education --dry-run
+python run.py run-today
 ```
-Try the others too: `--pillar news`, `--pillar trivia`, `--pillar dad_joke`.
-The composed image is saved in `generated_images/` so you can open and look at it.
+Or a specific one:
+```bash
+python run.py post --pillar news
+```
+
+Each of these does the full cycle: write -> image -> post to Facebook -> email you -> update the gallery -> push to GitHub.
 
 ---
 
-## 3. Use the web app (the main way to run it)
+## 3. Make it fully automatic (Windows Task Scheduler)
 
-```bash
-python run.py web
-```
-Then open **http://127.0.0.1:5000** in your browser. From there you can:
+So it runs on its own whenever your PC is on:
 
-- **Generate** a post for any pillar with one click.
-- **Edit** the headline and caption inline.
-- **Approve** or **Reject** each post.
-- **Publish now** an approved post, or **Publish all approved** at once.
+1. Press Start, type **Task Scheduler**, open it.
+2. Click **Create Basic Task**. Name it "BeriPost". Next.
+3. Trigger: **Daily**, pick a start time (e.g. 9:30 AM). Next.
+4. Action: **Start a program**.
+   - Program/script:
+     `C:\Users\neil\Desktop\BeriPost\.venv\Scripts\python.exe`
+   - Add arguments: `run.py run-today`
+   - Start in: `C:\Users\neil\Desktop\BeriPost`
+5. Finish.
 
-In **review** mode, generated posts wait under "Pending review" until you approve
-them. Keep the terminal window open while you use the app; press **Ctrl+C** to stop.
+It will now build and post the scheduled pillar each day. Days with no pillar in
+`config.yaml` are simply skipped. (It only runs while your PC is on.)
+
+> Alternative: run `python run.py run-scheduler` in a window and leave it open.
 
 ---
 
 ## 4. Getting a Facebook Page access token (step by step)
 
-You only need this to publish. It takes about 15 minutes the first time.
+Needed to post. About 15 minutes the first time.
 
-1. **Become a Meta developer.** Go to <https://developers.facebook.com/>, log in
-   with the Facebook account that manages the Careberi Page, and complete the
-   developer registration if prompted.
-2. **Create an app.** Click **My Apps → Create App**. Choose the **Business**
-   type. Give it a name (e.g. "Careberi Poster") and create it.
-3. **Add the Pages permissions.** In your app, open **Tools → Graph API Explorer**
-   (or add the "Facebook Login for Business" product). In the Graph API Explorer:
-   - Select your app in the top-right dropdown.
-   - Click **Add a Permission** and add: `pages_show_list`,
-     `pages_read_engagement`, and `pages_manage_posts`.
-   - Click **Generate Access Token** and approve the Careberi Page when asked.
-     This gives you a short-lived **user** token.
-4. **Find your Page ID.** With the token from step 3, in the Graph API Explorer
-   query `me/accounts`. Find the Careberi Page in the results — its `id` is your
-   **`FB_PAGE_ID`**, and the `access_token` next to it is a **Page** token
-   (short-lived).
-5. **Make the Page token long-lived (recommended).** Short-lived tokens expire in
-   about an hour. To get a long-lived (about 60-day) Page token:
-   - Exchange the user token for a long-lived user token:
-     `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=YOUR_APP_ID&client_secret=YOUR_APP_SECRET&fb_exchange_token=SHORT_LIVED_USER_TOKEN`
-     (App ID and App Secret are under **App Settings → Basic**.)
-   - Then query `me/accounts` again with that long-lived user token — the Page
-     `access_token` it returns is a **long-lived Page token**.
-6. **Put them in `.env`:**
-   ```
-   FB_PAGE_ID=your_page_id_from_step_4
-   FB_PAGE_ACCESS_TOKEN=your_long_lived_page_token_from_step_5
-   ```
+1. Go to <https://developers.facebook.com/>, log in with the account that manages the Careberi Page, and finish developer registration if asked.
+2. **My Apps -> Create App -> Business.** Name it (e.g. "Careberi Poster") and create it.
+3. Open **Tools -> Graph API Explorer**. Select your app top-right. Click **Add a Permission** and add `pages_show_list`, `pages_read_engagement`, and `pages_manage_posts`. Click **Generate Access Token** and approve the Careberi Page.
+4. In the Explorer, query `me/accounts`. Find the Careberi Page: its `id` is your **`FB_PAGE_ID`**, and the `access_token` beside it is a Page token.
+5. Make it long-lived (about 60 days): under **App Settings -> Basic** get your App ID and App Secret, then visit
+   `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=APP_ID&client_secret=APP_SECRET&fb_exchange_token=SHORT_LIVED_TOKEN`
+   and query `me/accounts` again with the result to get a long-lived Page token.
+6. Put `FB_PAGE_ID` and `FB_PAGE_ACCESS_TOKEN` into `.env`.
 
-> Tokens still expire eventually. If publishing starts failing with an auth
-> error, repeat steps 3–5 to get a fresh token. (A "System User" token in
-> Meta Business Settings can be made non-expiring for a fully hands-off setup.)
-
-Test publishing safely: generate a post in the web app, approve it, and click
-**Publish now**.
+If posting later fails with an auth error, the token expired - redo steps 3-5. (A Meta "System User" token can be made non-expiring for a fully hands-off setup.)
 
 ---
 
-## 5. Run it on a schedule
+## 5. Email copies (SMTP)
 
-BeriPost can build the right pillar for each day automatically (see the weekly
-plan under `posting.schedule` in `config.yaml`):
-```bash
-python run.py run-scheduler
-```
-Leave that running (or set it up as a scheduled task / cron job). In **review**
-mode it drops each day's post into the queue for you; in **auto** mode it
-publishes automatically.
+To get an email after each post, fill the `SMTP_*` and `NOTIFY_TO` values in `.env`.
 
-Publish everything you approved, from the command line:
-```bash
-python run.py publish-queue
-```
+Easiest with Gmail:
+1. Turn on 2-Step Verification on the Google account.
+2. Create an **App Password** (Google Account -> Security -> App passwords).
+3. In `.env`: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER=you@gmail.com`, `SMTP_PASS=` the app password, `NOTIFY_TO=` where you want the copy sent.
+
+If these are blank, posting still works, it just skips the email.
 
 ---
 
-## 6. Customizing
+## 6. The web gallery (GitHub Pages)
 
-- **Brand voice** — edit `brand_voice.md`. Plain English. The writer reads it
-  every time. This is the single biggest lever on how posts sound.
-- **Add / remove RSS feeds** — edit the `sources.feeds` list in `config.yaml`,
-  one URL per line. Any standard RSS/Atom feed works.
-- **Call to action, phone, website, colors** — the `brand:` section of `config.yaml`.
-- **Weekly schedule & posting time** — the `posting:` section of `config.yaml`.
-- **Switch review ↔ auto** — set `mode:` at the top of `config.yaml`.
-- **Images** — drop new backgrounds in `assets/backgrounds/`. Sizes/colors are in
-  the `images:` and `brand.colors:` sections. An AI-image hook is stubbed in
-  `beripost/images.py` for later.
+Your posts show up on a web page at `https://careberi.github.io/BeriPost/`. To turn it on once:
+
+1. On GitHub, open the `careberi/BeriPost` repo -> **Settings** -> **Pages**.
+2. Under "Build and deployment", set **Source: Deploy from a branch**, **Branch: `main`**, **Folder: `/docs`**. Save.
+
+After that, every post the engine pushes updates the page automatically. `config.yaml` already points `site.repo` at `careberi/BeriPost`.
+
+---
+
+## 7. Giving feedback (the bot remembers it)
+
+Steer the writing anytime. Three ways, all remembered and applied to future posts:
+
+- **Command:** `python run.py feedback "keep posts under 100 words and warmer"`
+- **Edit:** open `feedback.md` and type notes.
+- **Web:** click **Give feedback** on the gallery. It opens a pre-filled GitHub issue; the bot folds new issues in on its next run.
+
+Tidy the notes into a clean list anytime: `python run.py tidy-feedback`.
+
+The big-picture voice lives in `brand_voice.md`; day-to-day tweaks go through feedback.
 
 ---
 
@@ -191,56 +187,30 @@ python run.py publish-queue
 
 | Command | What it does |
 | --- | --- |
-| `python run.py web` | Start the local web app (main interface). |
-| `python run.py generate --pillar news` | Build one post, route it by mode. |
-| `python run.py generate --pillar trivia --dry-run` | Build + print, post nothing. |
-| `python run.py dry-run` | Build today's scheduled post and print it. |
-| `python run.py publish-queue` | Publish all approved posts. |
-| `python run.py run-scheduler` | Run the daily scheduler (keeps running). |
+| `python run.py run-today` | Build + post today's scheduled pillar (the automatic one). |
+| `python run.py post --pillar news` | Build + post one specific pillar now. |
+| `python run.py dry-run` | Build a post and print it. Posts nothing. |
+| `python run.py feedback "..."` | Add feedback the bot applies going forward. |
+| `python run.py tidy-feedback` | Consolidate feedback notes. |
+| `python run.py build-site` | Rebuild the web gallery from history. |
+| `python run.py run-scheduler` | Keep running and post daily (alternative to Task Scheduler). |
 
 ---
 
-## How it is built
+## Customizing
 
-```
-BeriPost/
-├─ run.py                # command line entry point
-├─ app.py                # Flask web app (review/approve/publish)
-├─ config.yaml           # all settings (no secrets)
-├─ brand_voice.md        # editable voice the writer loads every time
-├─ .env                  # your secrets (you create this; git-ignored)
-├─ beripost/
-│  ├─ config.py          # loads config.yaml + .env
-│  ├─ db.py              # SQLite: dedup + the post queue
-│  ├─ llm.py             # Claude API wrapper
-│  ├─ sources.py         # RSS fetch + dedup + safety classifier
-│  ├─ writer.py          # news & education posts
-│  ├─ light_content.py   # trivia & dad jokes (with anti-repeat)
-│  ├─ images.py          # Pillow image composition (+ AI hook)
-│  ├─ publisher.py       # Facebook Graph API publishing
-│  ├─ pipeline.py        # orchestrates build → route → publish
-│  └─ scheduler.py       # daily cadence
-├─ templates/ , static/  # web app UI
-├─ assets/               # backgrounds, logo, fonts (you add these)
-└─ data/                 # SQLite database (created at runtime)
-```
-
-- **Models:** `claude-sonnet-5` writes the posts; `claude-haiku-4-5` does cheap
-  classification/dedup. Change these in `config.yaml`.
-- **Error handling:** a failed post is logged and skipped; it never crashes a run.
-- **Nothing is posted twice:** articles and light content are de-duplicated in SQLite.
-
----
+- **Voice:** `brand_voice.md`. **Day-to-day tweaks:** feedback (section 7).
+- **Schedule / posting time / timezone:** `posting:` in `config.yaml`.
+- **RSS feeds:** `sources.feeds` in `config.yaml`, one URL per line.
+- **Phone / website / colors / tagline:** `brand:` in `config.yaml`.
+- **Turn images off:** `images.enabled: false` for text-only posts.
+- **Models:** `claude-sonnet-5` writes, `claude-haiku-4-5` filters/tidies. Change in `config.yaml`.
 
 ## Troubleshooting
 
-- **"ANTHROPIC_API_KEY is not set"** — you have not created `.env` or the key is
-  blank. See step 1c.
-- **"Facebook is not configured"** — add `FB_PAGE_ID` and `FB_PAGE_ACCESS_TOKEN`
-  to `.env` (section 4).
-- **"Facebook rejected the post"** — usually an expired token; redo section 4,
-  steps 3–5.
-- **No news posts generated** — the feeds had nothing new and on-brand, or the
-  safety filter skipped them. Try again later or add more feeds.
-- **Plain-color images** — add photos to `assets/backgrounds/` and a
-  `logo.png` to `assets/logo/`.
+- **"ANTHROPIC_API_KEY is not set"** - create `.env` and add your key (1b).
+- **"Facebook is not configured"** - add `FB_PAGE_ID` and `FB_PAGE_ACCESS_TOKEN` (section 4).
+- **"Facebook rejected the post"** - usually an expired token; redo section 4 steps 3-5.
+- **No email** - fill the `SMTP_*` values (section 5); check they are correct.
+- **Gallery not updating** - make sure GitHub Pages is enabled (section 6) and that `git push` works from the project folder.
+- **No news post** - the feeds had nothing new and on-brand; it will try next time, or add feeds.

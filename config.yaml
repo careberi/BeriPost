@@ -3,13 +3,13 @@
 #  secrets go in the .env file. Restart the app after changing this file.
 # ============================================================================
 
-# "review"  -> posts are generated into a local queue for you to approve/edit
-#              before anything goes to Facebook. START HERE.
-# "auto"    -> approved cadence posts publish automatically on schedule.
-mode: review
+# BeriPost runs hands-off: it writes, builds the image, posts to Facebook,
+# emails you a copy, and updates the web gallery. No approving.
+mode: auto
 
 brand:
   name: Careberi
+  tagline: "Home Health & Home Care"
   # TODO: put your real phone number here. It appears in the "call us" CTA.
   phone: "(555) 555-5555"
   # TODO: your real website.
@@ -45,10 +45,16 @@ posting:
     sunday: null
 
 images:
+  enabled: true            # auto-build the branded card image for every post
   width: 1080
   height: 1080
-  generator: templated     # "templated" (free, uses your backgrounds) - AI hook left for later
-  headline_max_chars: 120
+
+# The web gallery (GitHub Pages). "repo" powers the "Give feedback" buttons and
+# the feedback the bot reads back in. auto_push commits + pushes after each post.
+site:
+  repo: "careberi/BeriPost"
+  title: "Careberi posts"
+  auto_push: true
 
 sources:
   max_articles_per_run: 15

@@ -1,7 +1,13 @@
 """Turns a news item or an education topic into a finished Careberi post.
 
-Returns a dict: {"headline": str, "body": str}. The headline is a short line
-used on the composed image; the body is the full Facebook caption.
+Returns a dict with keys used by the rest of the pipeline:
+  title    - short hook, shown large on the card image
+  subtitle - a supporting line (news takeaway, or the tips-card heading)
+  bullets  - list of short tips (education only; [] otherwise)
+  body     - the full Facebook caption
+
+The writer always loads brand_voice.md AND the feedback memory, so your notes
+shape every post.
 """
 from __future__ import annotations
 
@@ -9,25 +15,29 @@ import json
 import logging
 
 from .config import Config
-from . import llm
+from . import feedback, llm
 
 log = logging.getLogger(__name__)
 
+_JSON_RULES = (
+    "\n\n---\n\n"
+    "You write Facebook posts for the Careberi page. Follow the brand voice and any "
+    "feedback above exactly. Output MUST be valid JSON only (no code fences, no extra "
+    "text), in this exact shape:\n"
+    '{"title": "<short scroll-stopping hook, max 10 words>", '
+    '"subtitle": "<one supporting line>", '
+    '"bullets": ["<short tip>", "..."], '
+    '"body": "<the full Facebook caption>"}\n'
+    "Use an empty list for bullets when the post is not a tips list. "
+    "Never use em dashes anywhere."
+)
 
-def _base_system(config: Config) -> str:
-    return (
-        config.brand_voice()
-        + "\n\n---\n\n"
-        + "You write Facebook posts for the Careberi page. Follow the brand voice above "
-        "exactly. Output MUST be valid JSON only, no other text, in this shape:\n"
-        '{"headline": "<short scroll-stopping line, max 12 words>", '
-        '"body": "<the full Facebook caption>"}\n'
-        "Do not use em dashes anywhere. Do not add markdown code fences."
-    )
+
+def _system(config: Config) -> str:
+    return config.brand_voice() + feedback.as_guidance(config) + _JSON_RULES
 
 
 def _parse(raw: str) -> dict:
-    """Parse the model's JSON. Fall back gracefully if it added stray text."""
     text = raw.strip()
     if text.startswith("```"):
         text = text.strip("`")
@@ -37,49 +47,52 @@ def _parse(raw: str) -> dict:
         text = text[start : end + 1]
     try:
         data = json.loads(text)
-        return {"headline": str(data.get("headline", "")).strip(),
-                "body": str(data.get("body", "")).strip()}
     except json.JSONDecodeError:
-        log.warning("Writer returned non-JSON; using raw text as body.")
-        return {"headline": "", "body": raw.strip()}
+        log.warning("Writer returned non-JSON; using raw text as the caption.")
+        return {"title": "", "subtitle": "", "bullets": [], "body": raw.strip()}
+    bullets = data.get("bullets") or []
+    if not isinstance(bullets, list):
+        bullets = []
+    return {
+        "title": str(data.get("title", "")).strip(),
+        "subtitle": str(data.get("subtitle", "")).strip(),
+        "bullets": [str(b).strip() for b in bullets if str(b).strip()],
+        "body": str(data.get("body", "")).strip(),
+    }
 
 
 def write_news_post(config: Config, item: dict) -> dict:
     """Original 80-150 word commentary on a news item, plus the source link."""
     cta = config.cta()
-    system = _base_system(config)
     prompt = (
-        "Write an ORIGINAL news-commentary post for the pillar 'news'.\n"
-        "Do NOT copy or closely paraphrase the article text. Summarize the gist in your "
-        "own words in one sentence, then add Careberi's own helpful angle for families: "
-        "what this means for them, or a reassuring, practical takeaway.\n"
-        "80 to 150 words of commentary. Then, on its own line, add: "
-        f'Read more: {item["url"]}\n'
-        f"End with this exact call to action: {cta}\n\n"
+        "Write an ORIGINAL news-commentary post (pillar 'news').\n"
+        "Do NOT copy or closely paraphrase the article. Summarize the gist in your own "
+        "words in one sentence, then add Careberi's helpful angle for families.\n"
+        "title: a short hook. subtitle: a one-line takeaway families can hold onto. "
+        "bullets: leave empty. body: 80 to 150 words of commentary, then on its own line "
+        f'"Read more: {item["url"]}", then this exact call to action: {cta}\n\n'
         f"Article title: {item['title']}\n"
         f"Article summary: {item.get('summary', '')[:800]}\n"
         f"Source: {item.get('source', '')}"
     )
-    raw = llm.complete(config.writer_model, system, prompt, max_tokens=900)
-    return _parse(raw)
+    return _parse(llm.complete(config.writer_model, _system(config), prompt, max_tokens=1000))
 
 
 def write_education_post(config: Config, topic: str | None = None) -> dict:
-    """Evergreen, reassuring 'what good home care looks like' education post."""
+    """Evergreen, reassuring tips post for families arranging care."""
     cta = config.cta()
-    system = _base_system(config)
     topic_line = f"Focus topic: {topic}\n" if topic else (
-        "Pick a helpful evergreen topic families care about (what good home care looks "
-        "like, questions to ask when arranging care, standards to expect, how to prepare "
-        "for a first caregiver visit, supporting a loved one's independence, etc.).\n"
+        "Pick a helpful evergreen topic (what good home care looks like, questions to ask "
+        "when arranging care, standards to expect, preparing for a first caregiver visit, "
+        "supporting a loved one's independence, etc.).\n"
     )
     prompt = (
-        "Write a purely informative, reassuring EDUCATION post for families arranging "
-        "care for an aging or disabled loved one.\n"
+        "Write a purely informative, reassuring EDUCATION tips post for families arranging "
+        "care for an aging or disabled loved one. No fear, never 'switch to us' framing.\n"
         + topic_line
-        + "90 to 150 words. Never frame it as 'if your provider does X, switch to us'. "
-        "No fear. Just genuinely helpful information a caring friend would share.\n"
-        f"End with this exact call to action: {cta}"
+        + "title: a short, warm hook. subtitle: a short heading for the tips (for example "
+        "'Questions worth asking' or 'Simple things that help'). bullets: 3 to 5 short, "
+        "concrete tips (each under 9 words). body: a warm 90 to 150 word caption that stands "
+        f"on its own, ending with this exact call to action: {cta}"
     )
-    raw = llm.complete(config.writer_model, system, prompt, max_tokens=900)
-    return _parse(raw)
+    return _parse(llm.complete(config.writer_model, _system(config), prompt, max_tokens=1000))

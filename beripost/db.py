@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS light_history (
 CREATE TABLE IF NOT EXISTS posts (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     pillar       TEXT,                 -- news / education / trivia / dad_joke
-    status       TEXT DEFAULT 'pending', -- pending / approved / rejected / published / failed
+    status       TEXT DEFAULT 'pending', -- published / failed
     headline     TEXT,
     body         TEXT,
     source_url   TEXT,
@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS posts (
     published_at REAL,
     fb_post_id   TEXT,
     error        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ingested_feedback (
+    issue_id   INTEGER UNIQUE,         -- GitHub issue we have already folded in
+    at         REAL
 );
 """
 
@@ -162,3 +167,18 @@ class DB:
 
     def mark_failed(self, post_id: int, error: str) -> None:
         self.update_post(post_id, status="failed", error=error)
+
+    # --- feedback issue tracking --------------------------------------------
+    def feedback_issue_seen(self, issue_id: int) -> bool:
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT 1 FROM ingested_feedback WHERE issue_id = ?", (issue_id,)
+            ).fetchone()
+            return row is not None
+
+    def remember_feedback_issue(self, issue_id: int) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT OR IGNORE INTO ingested_feedback (issue_id, at) VALUES (?, ?)",
+                (issue_id, time.time()),
+            )
