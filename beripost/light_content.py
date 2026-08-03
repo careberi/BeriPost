@@ -44,6 +44,15 @@ def _parse(raw: str) -> dict:
     }
 
 
+def _avoid_block(db: DB, kind: str, noun: str) -> str:
+    recent = db.recent_post_texts(kind, 40)
+    if not recent:
+        return ""
+    listed = "\n".join(f"- {r}" for r in recent[:30])
+    return (f"\nDo NOT repeat any of these already-posted {noun}. Make something clearly "
+            f"different:\n{listed}\n")
+
+
 def _generate(config: Config, db: DB, kind: str, system: str, prompt: str) -> dict:
     post = {"title": "", "subtitle": "", "bullets": [], "body": ""}
     for attempt in range(_MAX_TRIES):
@@ -69,7 +78,8 @@ def make_trivia(config: Config, db: DB) -> dict:
         "Write ONE genuine trivia QUESTION with its answer.\n"
         "It must be an actual question the reader could try to answer, not a statement or fun "
         "fact phrased as a sentence.\n"
-        "title: a short hook such as 'Trivia time!' or 'Can you guess?'. "
+        + _avoid_block(db, "trivia", "trivia questions")
+        + "title: a short hook such as 'Trivia time!' or 'Can you guess?'. "
         "subtitle: the trivia question itself, as one clear question ending in a question mark. "
         "bullets: empty. "
         "body: FIRST write out the full question again word for word (the caption must make "
@@ -89,7 +99,8 @@ def make_dad_joke(config: Config, db: DB) -> dict:
     )
     prompt = (
         "Write one clean, warm, genuinely groan-worthy dad joke.\n"
-        "title: the setup (a short question or line). subtitle: the punchline. bullets: empty. "
+        + _avoid_block(db, "dad_joke", "jokes")
+        + "title: the setup (a short question or line). subtitle: the punchline. bullets: empty. "
         f"body: the full joke as a caption, ending with this exact call to action: {cta}"
     )
     return _generate(config, db, "dad_joke", system, prompt)

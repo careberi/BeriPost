@@ -95,18 +95,28 @@ def write_news_post(config: Config, item: dict, include_link: bool = True) -> di
     return _parse(llm.complete(config.writer_model, _system(config), prompt, max_tokens=1000))
 
 
-def write_education_post(config: Config, topic: str | None = None) -> dict:
+def write_education_post(config: Config, topic: str | None = None,
+                         avoid: list[str] | None = None) -> dict:
     """Evergreen, reassuring tips post for families arranging care."""
     cta = config.cta()
     topic_line = f"Focus topic: {topic}\n" if topic else (
         "Pick a helpful evergreen topic (what good home care looks like, questions to ask "
-        "when arranging care, standards to expect, preparing for a first caregiver visit, "
-        "supporting a loved one's independence, etc.).\n"
+        "when arranging care, standards to expect, preparing for a caregiver visit, "
+        "supporting a loved one's independence, safety at home, respite for family "
+        "caregivers, communicating with a care team, dementia-friendly routines, etc.).\n"
     )
+    avoid_line = ""
+    if avoid:
+        listed = "\n".join(f"- {a}" for a in avoid[:25])
+        avoid_line = (
+            "ALREADY POSTED - do NOT repeat any of these topics or angles. Choose a clearly "
+            "DIFFERENT subject from these:\n" + listed + "\n"
+        )
     prompt = (
         "Write a purely informative, reassuring EDUCATION tips post for families arranging "
         "care for an aging or disabled loved one. No fear, never 'switch to us' framing.\n"
         + topic_line
+        + avoid_line
         + "title: a short, warm hook. subtitle: a short heading for the tips (for example "
         "'Questions worth asking' or 'Simple things that help'). bullets: 3 to 5 short, "
         "concrete tips (each under 9 words). body: a warm 90 to 150 word caption that stands "

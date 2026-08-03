@@ -59,7 +59,8 @@ def build_post(config: Config, db: DB, pillar: str) -> dict:
             # posts (done in run_once). Previews must not consume articles.
             result["article"] = item
         elif pillar == "education":
-            post = writer.write_education_post(config)
+            avoid = db.recent_post_texts("education", 25)
+            post = writer.write_education_post(config, avoid=avoid)
         elif pillar == "trivia":
             post = light_content.make_trivia(config, db)
         elif pillar == "dad_joke":

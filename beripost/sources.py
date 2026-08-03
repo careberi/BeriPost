@@ -6,6 +6,7 @@ from __future__ import annotations
 import calendar
 import logging
 import time
+from urllib.parse import quote_plus
 
 import feedparser
 
@@ -14,6 +15,17 @@ from .db import DB
 from . import llm
 
 log = logging.getLogger(__name__)
+
+
+def _topic_feeds(config: Config, days: int) -> list[str]:
+    """Build dynamic Google News RSS search feeds from configured topics."""
+    urls = []
+    for topic in config.sources.get("topics", []):
+        query = quote_plus(f"{topic} when:{days}d")
+        urls.append(
+            f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+        )
+    return urls
 
 
 def _entry_epoch(entry) -> float | None:
@@ -65,7 +77,10 @@ def fetch_new_items(config: Config, db: DB, limit: int | None = None) -> list[di
     cutoff = time.time() - max_age_days * 86400
     fresh: list[dict] = []
 
-    for feed_url in config.feeds:
+    # Explicit RSS feeds plus dynamic topic searches (Google News RSS).
+    all_feeds = list(config.feeds) + _topic_feeds(config, max_age_days)
+
+    for feed_url in all_feeds:
         log.info("Fetching feed: %s", feed_url)
         try:
             parsed = feedparser.parse(feed_url)

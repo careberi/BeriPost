@@ -160,6 +160,24 @@ class DB:
                 ).fetchall()
             return [dict(r) for r in rows]
 
+    def recent_post_texts(self, pillar: str, limit: int = 25) -> list[str]:
+        """Short summaries of recently PUBLISHED posts of this pillar, so the
+        writer can avoid repeating topics it has already covered."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT headline, body FROM posts WHERE pillar = ? AND status = 'published' "
+                "ORDER BY created_at DESC LIMIT ?",
+                (pillar, limit),
+            ).fetchall()
+        out = []
+        for r in rows:
+            title = (r["headline"] or "").strip()
+            snippet = " ".join((r["body"] or "").split())[:110]
+            summary = f"{title} - {snippet}" if title else snippet
+            if summary.strip():
+                out.append(summary)
+        return out
+
     def update_post(self, post_id: int, **fields) -> None:
         if not fields:
             return
