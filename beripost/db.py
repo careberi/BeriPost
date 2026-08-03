@@ -77,8 +77,12 @@ class DB:
 
     # --- article dedup ------------------------------------------------------
     def article_seen(self, guid: str) -> bool:
+        # Only articles we actually POSTED block reuse. Examined-but-unposted
+        # rows (if any linger) must never hide fresh articles.
         with self._conn() as c:
-            row = c.execute("SELECT 1 FROM articles WHERE guid = ?", (guid,)).fetchone()
+            row = c.execute(
+                "SELECT 1 FROM articles WHERE guid = ? AND used = 1", (guid,)
+            ).fetchone()
             return row is not None
 
     def remember_article(self, guid: str, url: str, title: str, source: str) -> None:
