@@ -51,8 +51,18 @@ def publish(config: Config, caption: str, image_path: str | Path | None) -> str:
         payload = {}
 
     if resp.status_code != 200 or "error" in payload:
-        err = payload.get("error", {}).get("message", resp.text)
-        raise PublishError(f"Facebook rejected the post: {err}")
+        error = payload.get("error", {}) or {}
+        err = error.get("message", resp.text)
+        hint = ""
+        if error.get("code") == 200 or "publish_actions" in str(err):
+            hint = (
+                "\n\nThis almost always means the saved token is a USER token, not a "
+                "PAGE token. Fix it in the Setup screen: fill in App ID + App Secret and a "
+                "fresh User token, then click 'Make token long-lived' (that produces a Page "
+                "token). Or in the Graph API Explorer, under 'User or Page' pick the token "
+                "listed beneath 'Page Access Tokens'."
+            )
+        raise PublishError(f"Facebook rejected the post: {err}{hint}")
 
     post_id = payload.get(id_field) or payload.get("id") or ""
     log.info("Published to Facebook, post id=%s", post_id)
