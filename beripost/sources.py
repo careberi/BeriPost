@@ -3,7 +3,9 @@ political or sensitive with a cheap Claude classifier.
 """
 from __future__ import annotations
 
+import calendar
 import logging
+import time
 
 import feedparser
 
@@ -12,6 +14,18 @@ from .db import DB
 from . import llm
 
 log = logging.getLogger(__name__)
+
+
+def _entry_epoch(entry) -> float | None:
+    """The entry's publish time as a Unix timestamp, or None if unknown."""
+    for key in ("published_parsed", "updated_parsed"):
+        parsed = entry.get(key)
+        if parsed:
+            try:
+                return calendar.timegm(parsed)  # feedparser dates are UTC
+            except Exception:  # noqa: BLE001
+                pass
+    return None
 
 CLASSIFIER_SYSTEM = (
     "You are a content safety filter for a home care agency's Facebook page. "
@@ -47,6 +61,8 @@ def fetch_new_items(config: Config, db: DB, limit: int | None = None) -> list[di
     DB immediately so we never surface the same article twice, even across runs.
     """
     limit = limit or config.sources.get("max_articles_per_run", 15)
+    max_age_days = int(config.sources.get("max_age_days", 60))
+    cutoff = time.time() - max_age_days * 86400
     fresh: list[dict] = []
 
     for feed_url in config.feeds:
@@ -64,12 +80,14 @@ def fetch_new_items(config: Config, db: DB, limit: int | None = None) -> list[di
             if not guid or db.article_seen(guid):
                 continue
 
+            # Only consider recent articles (default: last 60 days).
+            published = _entry_epoch(entry)
+            if published is not None and published < cutoff:
+                continue
+
             title = entry.get("title", "").strip()
             url = entry.get("link", "")
             summary = entry.get("summary", "")
-
-            # Remember it now so we do not re-consider it next run.
-            db.remember_article(guid, url, title, source_name)
 
             if not title or not url:
                 continue

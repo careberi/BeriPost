@@ -89,9 +89,15 @@ class DB:
                 (guid, url, title, source, time.time()),
             )
 
-    def mark_article_used(self, guid: str) -> None:
+    def mark_article_used(self, guid: str, url: str = "", title: str = "", source: str = "") -> None:
+        """Record an article as posted (upsert), so it is never posted again."""
         with self._conn() as c:
-            c.execute("UPDATE articles SET used = 1 WHERE guid = ?", (guid,))
+            c.execute(
+                "INSERT INTO articles (guid, url, title, source, first_seen, used) "
+                "VALUES (?, ?, ?, ?, ?, 1) "
+                "ON CONFLICT(guid) DO UPDATE SET used = 1",
+                (guid, url, title, source, time.time()),
+            )
 
     # --- light content dedup ------------------------------------------------
     @staticmethod

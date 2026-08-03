@@ -44,7 +44,7 @@ def pillar_for_today(config: Config, weekday: int | None = None) -> str | None:
 def build_post(config: Config, db: DB, pillar: str) -> dict:
     """Generate content + image for one pillar. Never raises."""
     result = {"ok": False, "pillar": pillar, "title": "", "body": "",
-              "source_url": None, "image_path": None, "error": None}
+              "source_url": None, "image_path": None, "error": None, "article": None}
     try:
         if pillar == "news":
             items = sources.fetch_new_items(config, db, limit=5)
@@ -55,7 +55,9 @@ def build_post(config: Config, db: DB, pillar: str) -> dict:
             include_link = config.should_link(item["url"])
             post = writer.write_news_post(config, item, include_link=include_link)
             result["source_url"] = item["url"] if include_link else None
-            db.mark_article_used(item["guid"])
+            # Remember the article, but only mark it "used" after it actually
+            # posts (done in run_once). Previews must not consume articles.
+            result["article"] = item
         elif pillar == "education":
             post = writer.write_education_post(config)
         elif pillar == "trivia":
@@ -122,6 +124,12 @@ def run_once(config: Config, db: DB, pillar: str | None = None, dry_run: bool = 
         return result
 
     _publish_and_record(config, db, result)
+
+    # Only now, after a real publish, mark the news article as used so it is
+    # never posted again. (Previews never reach this point.)
+    if result.get("status") == "published" and result.get("article"):
+        a = result["article"]
+        db.mark_article_used(a["guid"], a.get("url", ""), a.get("title", ""), a.get("source", ""))
 
     # Update the web gallery and push it, regardless of publish success.
     try:
