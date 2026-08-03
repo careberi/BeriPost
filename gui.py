@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import logging
 import queue
+import subprocess
 import threading
 import webbrowser
 from pathlib import Path
 
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, simpledialog, ttk
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from beripost import config as config_module
 from beripost import fbauth, feedback, llm, pipeline, settings_io, site
@@ -42,6 +46,19 @@ PILLARS = [
     ("Trivia", "trivia"),
     ("Dad joke", "dad_joke"),
 ]
+
+DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+# (label shown in the Controller dropdown, value stored in config.yaml)
+SCHEDULE_CHOICES = [
+    ("Skip (no post)", "null"),
+    ("News commentary", "news"),
+    ("Family education", "education"),
+    ("Trivia", "trivia"),
+    ("Dad joke", "dad_joke"),
+]
+_LABEL_BY_VALUE = {v: lbl for lbl, v in SCHEDULE_CHOICES}
+_TASK_NAME = "BeriPost"
 
 # (env key, label, is_secret)
 ENV_FIELDS_CLAUDE = [("ANTHROPIC_API_KEY", "Claude API key", True)]
@@ -111,6 +128,9 @@ class App:
         self._preview_img = None
         self.vars: dict[str, tk.StringVar] = {}
         self._secret_entries: list[tk.Entry] = []
+        self._sched: BackgroundScheduler | None = None
+        self.day_vars: dict[str, tk.StringVar] = {}
+        self.time_var = tk.StringVar()
 
         root.title("BeriPost - Careberi")
         root.geometry("1040x740")
@@ -124,7 +144,16 @@ class App:
         self._build()
         self.root.after(150, self._drain)
         self._refresh_status()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._log("Ready. If a button says a key is missing, open the Setup tab.")
+
+    def _on_close(self):
+        if self._sched:
+            try:
+                self._sched.shutdown(wait=False)
+            except Exception:  # noqa: BLE001
+                pass
+        self.root.destroy()
 
     # --- layout -------------------------------------------------------------
     def _build(self):
@@ -138,11 +167,14 @@ class App:
         self.nb = ttk.Notebook(self.root)
         self.nb.pack(fill="both", expand=True)
         self.tab_posts = tk.Frame(self.nb, bg=PAGE)
+        self.tab_controller = ScrollFrame(self.nb, bg=PAGE)
         self.tab_setup = ScrollFrame(self.nb, bg=PAGE)
         self.nb.add(self.tab_posts, text="  Create posts  ")
+        self.nb.add(self.tab_controller, text="  Controller  ")
         self.nb.add(self.tab_setup, text="  Setup  ")
 
         self._build_posts(self.tab_posts)
+        self._build_controller(self.tab_controller.inner)
         self._build_setup(self.tab_setup.inner)
 
         self.status = tk.Label(self.root, text="", bg="#dfe6ee", anchor="w", padx=10)
@@ -158,6 +190,8 @@ class App:
         self.pillar.pack(side="left", padx=(6, 14))
         self.btn_preview = tk.Button(controls, text="Preview (no posting)", command=self.on_preview)
         self.btn_preview.pack(side="left", padx=4)
+        self.btn_regen = tk.Button(controls, text="Regenerate", command=self.on_regenerate)
+        self.btn_regen.pack(side="left", padx=4)
         self.btn_post = tk.Button(controls, text="Post now", bg=BERRY, fg="white",
                                   activebackground="#b8446b", command=self.on_post)
         self.btn_post.pack(side="left", padx=4)
@@ -370,8 +404,9 @@ class App:
     def _set_busy(self, busy: bool, msg: str = "Working..."):
         self._busy = busy
         state = "disabled" if busy else "normal"
-        for b in (self.btn_preview, self.btn_post):
-            b.config(state=state)
+        for b in (self.btn_preview, getattr(self, "btn_regen", None), self.btn_post):
+            if b is not None:
+                b.config(state=state)
 
     def _run_bg(self, fn, on_done):
         if self._busy:
@@ -434,6 +469,15 @@ class App:
         self._run_bg(lambda: pipeline.run_once(self.config, self.db, pillar=p, dry_run=True),
                      self._show_result)
 
+    def on_regenerate(self):
+        """Discard the shown post and build a brand-new one of the same type."""
+        if self._needs_key():
+            return
+        p = self._selected_pillar()
+        self._log(f"Generating a new {p or 'today'} post...")
+        self._run_bg(lambda: pipeline.run_once(self.config, self.db, pillar=p, dry_run=True),
+                     self._show_result)
+
     def on_post(self):
         if self._needs_key():
             return
@@ -470,6 +514,162 @@ class App:
             self._log("Opened the local web gallery in your browser.")
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("BeriPost", str(exc))
+
+    # --- Controller tab -----------------------------------------------------
+    def _build_controller(self, parent):
+        pad = {"padx": 18}
+        tk.Label(parent, text="Controller", bg=PAGE, fg=NAVY, font=("Segoe UI", 15, "bold")
+                 ).pack(anchor="w", pady=(14, 2), **pad)
+        tk.Label(parent, text="Choose what to post each day and when, then turn on automatic posting.",
+                 bg=PAGE, fg="#4B5563", wraplength=900, justify="left").pack(anchor="w", **pad)
+
+        trow = tk.Frame(parent, bg=PAGE)
+        trow.pack(anchor="w", padx=18, pady=(14, 4))
+        tk.Label(trow, text="Post at (24h, e.g. 09:30):", bg=PAGE, width=24, anchor="w").pack(side="left")
+        tk.Entry(trow, textvariable=self.time_var, width=10).pack(side="left")
+
+        self._section(parent, "Weekly plan")
+        labels = [lbl for lbl, _ in SCHEDULE_CHOICES]
+        for day in DAYS:
+            row = tk.Frame(parent, bg=PAGE)
+            row.pack(fill="x", padx=18, pady=2)
+            tk.Label(row, text=day.capitalize(), bg=PAGE, width=14, anchor="w").pack(side="left")
+            var = tk.StringVar()
+            ttk.Combobox(row, values=labels, state="readonly", textvariable=var, width=22).pack(side="left")
+            self.day_vars[day] = var
+
+        brow = tk.Frame(parent, bg=PAGE)
+        brow.pack(anchor="w", padx=18, pady=(10, 6))
+        tk.Button(brow, text="Save schedule", command=self.on_save_schedule).pack(side="left")
+        tk.Button(brow, text="Post today's now", command=self.on_run_now).pack(side="left", padx=8)
+
+        self._section(parent, "Automatic posting (while BeriPost is open)")
+        self.auto_status = tk.Label(parent, text="Automatic posting: OFF", bg="#e8eef6", fg=NAVY,
+                                    anchor="w", font=("Segoe UI", 10, "bold"))
+        self.auto_status.pack(fill="x", padx=18, pady=6)
+        arow = tk.Frame(parent, bg=PAGE)
+        arow.pack(anchor="w", padx=18)
+        self.btn_start = tk.Button(arow, text="Start automatic posting", bg=BERRY, fg="white",
+                                   activebackground="#b8446b", command=self.on_start_auto)
+        self.btn_start.pack(side="left")
+        self.btn_stop = tk.Button(arow, text="Stop", command=self.on_stop_auto, state="disabled")
+        self.btn_stop.pack(side="left", padx=8)
+
+        self._section(parent, "Run 24/7 (even when BeriPost is closed)")
+        tk.Label(parent, text="Creates a Windows scheduled task that posts each day at the time above, "
+                              "even if the app is closed (your PC must be on).", bg=PAGE, fg="#4B5563",
+                 wraplength=900, justify="left").pack(anchor="w", padx=18)
+        wrow = tk.Frame(parent, bg=PAGE)
+        wrow.pack(anchor="w", padx=18, pady=(6, 24))
+        tk.Button(wrow, text="Set up Windows task", command=self.on_setup_task).pack(side="left")
+        tk.Button(wrow, text="Remove Windows task", command=self.on_remove_task).pack(side="left", padx=8)
+
+        self._load_schedule_into_form()
+
+    def _load_schedule_into_form(self):
+        self.time_var.set(str(self.config.posting.get("time_of_day", "09:30")))
+        schedule = self.config.posting.get("schedule", {})
+        for day in DAYS:
+            val = schedule.get(day)
+            raw = "null" if val in (None, "null") else str(val)
+            self.day_vars[day].set(_LABEL_BY_VALUE.get(raw, "Skip (no post)"))
+
+    def _save_schedule(self):
+        cfg = self.config.config_path
+        value_by_label = {lbl: v for lbl, v in SCHEDULE_CHOICES}
+        for day in DAYS:
+            settings_io.set_yaml_raw(cfg, day, value_by_label.get(self.day_vars[day].get(), "null"))
+        settings_io.set_yaml_scalar(cfg, "time_of_day", self.time_var.get().strip() or "09:30")
+        self.config = config_module.reload_config()
+
+    def on_save_schedule(self):
+        self._save_schedule()
+        self._log("Schedule saved.")
+        messagebox.showinfo("BeriPost", "Schedule saved.")
+
+    def _fb_ready_or_warn(self) -> bool:
+        if not (self.config.fb_page_id and self.config.fb_page_token):
+            messagebox.showwarning("Facebook not connected",
+                                   "Connect Facebook in the Setup tab before automatic posting.")
+            return False
+        return True
+
+    def on_run_now(self):
+        if self._needs_key() or not self._fb_ready_or_warn():
+            return
+        self._save_schedule()
+        self._log("Posting today's scheduled post now...")
+        self._run_bg(lambda: pipeline.run_once(self.config, self.db, dry_run=False), self._show_result)
+
+    def _auto_job(self):
+        logging.getLogger().info("Scheduled run starting...")
+        pipeline.run_once(self.config, self.db)
+
+    def on_start_auto(self):
+        if self._needs_key() or not self._fb_ready_or_warn():
+            return
+        self._save_schedule()
+        time_str = self.time_var.get().strip() or "09:30"
+        try:
+            hour, minute = (int(x) for x in time_str.split(":"))
+        except Exception:  # noqa: BLE001
+            messagebox.showerror("BeriPost", "Time must look like 09:30 (24-hour).")
+            return
+        tz = self.config.posting.get("timezone", "America/New_York")
+        if self._sched:
+            self._sched.shutdown(wait=False)
+        self._sched = BackgroundScheduler(timezone=tz)
+        self._sched.add_job(self._auto_job, CronTrigger(hour=hour, minute=minute, timezone=tz),
+                            id="daily", misfire_grace_time=3600)
+        self._sched.start()
+        self.auto_status.config(text=f"Automatic posting: ON - daily at {time_str} ({tz}). Keep BeriPost open.")
+        self.btn_start.config(state="disabled")
+        self.btn_stop.config(state="normal")
+        self._log(f"Automatic posting started (daily at {time_str}).")
+
+    def on_stop_auto(self):
+        if self._sched:
+            self._sched.shutdown(wait=False)
+            self._sched = None
+        self.auto_status.config(text="Automatic posting: OFF")
+        self.btn_start.config(state="normal")
+        self.btn_stop.config(state="disabled")
+        self._log("Automatic posting stopped.")
+
+    def on_setup_task(self):
+        self._save_schedule()
+        time_str = self.time_var.get().strip() or "09:30"
+        py = self.config.root / ".venv" / "Scripts" / "pythonw.exe"
+        run = self.config.root / "run.py"
+        if not py.exists():
+            messagebox.showerror("BeriPost", f"Could not find {py}")
+            return
+        cmd = ["schtasks", "/Create", "/TN", _TASK_NAME, "/TR", f'"{py}" "{run}" run-today',
+               "/SC", "DAILY", "/ST", time_str, "/F"]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("BeriPost", str(exc))
+            return
+        if r.returncode == 0:
+            messagebox.showinfo("BeriPost", f"Done. Windows will post your scheduled pillar daily at "
+                                            f"{time_str}, even when BeriPost is closed (PC must be on).")
+            self._log("Windows task created.")
+        else:
+            messagebox.showerror("BeriPost", (r.stderr or r.stdout or "schtasks failed").strip())
+
+    def on_remove_task(self):
+        try:
+            r = subprocess.run(["schtasks", "/Delete", "/TN", _TASK_NAME, "/F"],
+                               capture_output=True, text=True)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("BeriPost", str(exc))
+            return
+        if r.returncode == 0:
+            messagebox.showinfo("BeriPost", "Windows task removed.")
+            self._log("Windows task removed.")
+        else:
+            messagebox.showerror("BeriPost", (r.stderr or r.stdout or "No task to remove.").strip())
 
 
 def main():

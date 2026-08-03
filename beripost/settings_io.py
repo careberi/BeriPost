@@ -49,6 +49,17 @@ def update_env(path: Path, updates: dict, template: Path | None = None) -> None:
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
+def set_yaml_raw(path: Path, key: str, raw_value: str) -> bool:
+    """Set a `key:` value WITHOUT adding quotes (for YAML words/null, e.g.
+    schedule days like `monday: news` or `sunday: null`)."""
+    text = path.read_text(encoding="utf-8")
+    pattern = re.compile(rf"^(\s*){re.escape(key)}:[ \t]*.*$", re.M)
+    new_text, n = pattern.subn(rf"\g<1>{key}: {raw_value}", text, count=1)
+    if n:
+        path.write_text(new_text, encoding="utf-8")
+    return n > 0
+
+
 def set_yaml_scalar(path: Path, key: str, value: str) -> bool:
     """Replace the value of a single `key:` line in a YAML file, keeping comments.
 
