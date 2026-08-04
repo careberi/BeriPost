@@ -131,6 +131,9 @@ class App:
         self._sched: BackgroundScheduler | None = None
         self.day_vars: dict[str, tk.StringVar] = {}
         self.time_var = tk.StringVar()
+        # Session memory so Regenerate produces something different each time.
+        self._shown_guids: set = set()
+        self._shown_titles: dict[str, list] = {}
 
         root.title("BeriPost - Careberi")
         root.geometry("1040x740")
@@ -464,19 +467,39 @@ class App:
     def on_preview(self):
         if self._needs_key():
             return
-        p = self._selected_pillar()
-        self._log(f"Building a preview ({p or 'today'})...")
-        self._run_bg(lambda: pipeline.run_once(self.config, self.db, pillar=p, dry_run=True),
-                     self._show_result)
+        self._generate_preview(self._selected_pillar(), "Building a preview")
 
     def on_regenerate(self):
-        """Discard the shown post and build a brand-new one of the same type."""
+        """Discard the shown post and build a brand-new, different one."""
         if self._needs_key():
             return
-        p = self._selected_pillar()
-        self._log(f"Generating a new {p or 'today'} post...")
-        self._run_bg(lambda: pipeline.run_once(self.config, self.db, pillar=p, dry_run=True),
-                     self._show_result)
+        self._generate_preview(self._selected_pillar(), "Generating a new")
+
+    def _generate_preview(self, p, verb):
+        self._log(f"{verb} ({p or 'today'}) post...")
+        key = p or "today"
+        exclude = set(self._shown_guids)
+        avoid_extra = list(self._shown_titles.get(key, []))
+
+        def done(result):
+            self._record_shown(key, result)
+            self._show_result(result)
+
+        self._run_bg(
+            lambda: pipeline.run_once(self.config, self.db, pillar=p, dry_run=True,
+                                      exclude_guids=exclude, avoid_extra=avoid_extra),
+            done)
+
+    def _record_shown(self, key, result):
+        if not isinstance(result, dict) or not result.get("ok"):
+            return
+        art = result.get("article")
+        if art and art.get("guid"):
+            self._shown_guids.add(art["guid"])
+        title = (result.get("title") or "").strip()
+        if title:
+            snippet = " ".join((result.get("body") or "").split())[:90]
+            self._shown_titles.setdefault(key, []).append(f"{title} - {snippet}")
 
     def on_post(self):
         if self._needs_key():

@@ -66,13 +66,15 @@ def _is_safe(cheap_model: str, title: str, summary: str) -> bool:
         return False
 
 
-def fetch_new_items(config: Config, db: DB, limit: int | None = None) -> list[dict]:
+def fetch_new_items(config: Config, db: DB, limit: int | None = None,
+                    exclude: set | None = None) -> list[dict]:
     """Return a list of fresh, safe news items we have never used before.
 
     Each item: {guid, title, url, summary, source}. Items are remembered in the
     DB immediately so we never surface the same article twice, even across runs.
     """
     limit = limit or config.sources.get("max_articles_per_run", 15)
+    exclude = exclude or set()
     max_age_days = int(config.sources.get("max_age_days", 60))
     cutoff = time.time() - max_age_days * 86400
     fresh: list[dict] = []
@@ -92,7 +94,7 @@ def fetch_new_items(config: Config, db: DB, limit: int | None = None) -> list[di
 
         for entry in parsed.entries:
             guid = _guid(entry)
-            if not guid or db.article_seen(guid):
+            if not guid or guid in exclude or db.article_seen(guid):
                 continue
 
             # Only consider recent articles (default: last 60 days).

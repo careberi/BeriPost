@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from .config import Config
 from . import feedback, llm
@@ -46,6 +47,8 @@ def _parse(raw: str) -> dict:
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end != -1:
         text = text[start : end + 1]
+    # Tolerate trailing commas the model sometimes adds, e.g. ...", }
+    text = re.sub(r",(\s*[}\]])", r"\1", text)
     try:
         data = json.loads(text)
     except json.JSONDecodeError:

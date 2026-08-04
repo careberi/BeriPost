@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from .config import Config
 from .db import DB
@@ -32,6 +33,7 @@ def _parse(raw: str) -> dict:
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end != -1:
         text = text[start : end + 1]
+    text = re.sub(r",(\s*[}\]])", r"\1", text)  # tolerate trailing commas
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -44,13 +46,13 @@ def _parse(raw: str) -> dict:
     }
 
 
-def _avoid_block(db: DB, kind: str, noun: str) -> str:
-    recent = db.recent_post_texts(kind, 40)
+def _avoid_block(db: DB, kind: str, noun: str, extra: list[str] | None = None) -> str:
+    recent = db.recent_post_texts(kind, 40) + list(extra or [])
     if not recent:
         return ""
-    listed = "\n".join(f"- {r}" for r in recent[:30])
-    return (f"\nDo NOT repeat any of these already-posted {noun}. Make something clearly "
-            f"different:\n{listed}\n")
+    listed = "\n".join(f"- {r}" for r in recent[:40])
+    return (f"\nDo NOT repeat any of these already-posted or already-shown {noun}. Make "
+            f"something clearly different:\n{listed}\n")
 
 
 def _generate(config: Config, db: DB, kind: str, system: str, prompt: str) -> dict:
@@ -66,7 +68,7 @@ def _generate(config: Config, db: DB, kind: str, system: str, prompt: str) -> di
     return post
 
 
-def make_trivia(config: Config, db: DB) -> dict:
+def make_trivia(config: Config, db: DB, avoid_extra: list[str] | None = None) -> dict:
     cta = config.cta()
     system = _system(
         config,
@@ -78,7 +80,7 @@ def make_trivia(config: Config, db: DB) -> dict:
         "Write ONE genuine trivia QUESTION with its answer.\n"
         "It must be an actual question the reader could try to answer, not a statement or fun "
         "fact phrased as a sentence.\n"
-        + _avoid_block(db, "trivia", "trivia questions")
+        + _avoid_block(db, "trivia", "trivia questions", avoid_extra)
         + "title: a short hook such as 'Trivia time!' or 'Can you guess?'. "
         "subtitle: the trivia question itself, as one clear question ending in a question mark. "
         "bullets: empty. "
@@ -90,7 +92,7 @@ def make_trivia(config: Config, db: DB) -> dict:
     return _generate(config, db, "trivia", system, prompt)
 
 
-def make_dad_joke(config: Config, db: DB) -> dict:
+def make_dad_joke(config: Config, db: DB, avoid_extra: list[str] | None = None) -> dict:
     cta = config.cta()
     system = _system(
         config,
@@ -99,7 +101,7 @@ def make_dad_joke(config: Config, db: DB) -> dict:
     )
     prompt = (
         "Write one clean, warm, genuinely groan-worthy dad joke.\n"
-        + _avoid_block(db, "dad_joke", "jokes")
+        + _avoid_block(db, "dad_joke", "jokes", avoid_extra)
         + "title: the setup (a short question or line). subtitle: the punchline. bullets: empty. "
         f"body: the full joke as a caption, ending with this exact call to action: {cta}"
     )

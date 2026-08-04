@@ -41,13 +41,19 @@ def pillar_for_today(config: Config, weekday: int | None = None) -> str | None:
     return None
 
 
-def build_post(config: Config, db: DB, pillar: str) -> dict:
-    """Generate content + image for one pillar. Never raises."""
+def build_post(config: Config, db: DB, pillar: str, exclude_guids: set | None = None,
+               avoid_extra: list[str] | None = None) -> dict:
+    """Generate content + image for one pillar. Never raises.
+
+    exclude_guids / avoid_extra let the app request a genuinely different post
+    from what it just showed (used by the Regenerate button).
+    """
+    avoid_extra = list(avoid_extra or [])
     result = {"ok": False, "pillar": pillar, "title": "", "body": "",
               "source_url": None, "image_path": None, "error": None, "article": None}
     try:
         if pillar == "news":
-            items = sources.fetch_new_items(config, db, limit=5)
+            items = sources.fetch_new_items(config, db, limit=8, exclude=exclude_guids)
             if not items:
                 result["error"] = "No fresh, on-brand news articles found right now."
                 return result
@@ -59,12 +65,12 @@ def build_post(config: Config, db: DB, pillar: str) -> dict:
             # posts (done in run_once). Previews must not consume articles.
             result["article"] = item
         elif pillar == "education":
-            avoid = db.recent_post_texts("education", 25)
+            avoid = db.recent_post_texts("education", 25) + avoid_extra
             post = writer.write_education_post(config, avoid=avoid)
         elif pillar == "trivia":
-            post = light_content.make_trivia(config, db)
+            post = light_content.make_trivia(config, db, avoid_extra=avoid_extra)
         elif pillar == "dad_joke":
-            post = light_content.make_dad_joke(config, db)
+            post = light_content.make_dad_joke(config, db, avoid_extra=avoid_extra)
         else:
             result["error"] = f"Unknown pillar: {pillar}"
             return result
@@ -109,7 +115,8 @@ def _publish_and_record(config: Config, db: DB, result: dict) -> dict:
     return result
 
 
-def run_once(config: Config, db: DB, pillar: str | None = None, dry_run: bool = False) -> dict:
+def run_once(config: Config, db: DB, pillar: str | None = None, dry_run: bool = False,
+             exclude_guids: set | None = None, avoid_extra: list[str] | None = None) -> dict:
     """One full autonomous cycle. If pillar is None, uses today's scheduled pillar."""
     if not dry_run:
         feedback.ingest_github(config, db)
@@ -120,7 +127,7 @@ def run_once(config: Config, db: DB, pillar: str | None = None, dry_run: bool = 
         return {"ok": True, "skipped": True, "pillar": None}
 
     log.info("Building a '%s' post (dry_run=%s)", pillar, dry_run)
-    result = build_post(config, db, pillar)
+    result = build_post(config, db, pillar, exclude_guids=exclude_guids, avoid_extra=avoid_extra)
     if not result["ok"] or dry_run:
         return result
 
